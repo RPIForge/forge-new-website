@@ -13,7 +13,6 @@ COPY models models
 COPY schemas schemas
 COPY alembic alembic
 COPY alembic.ini .
-COPY .env .
 COPY main.py .
 COPY init.sh .
 COPY initial_data.py .

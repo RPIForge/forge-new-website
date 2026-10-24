@@ -7,7 +7,6 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # Copy the rest of app
-COPY .env .
 COPY bot.py .
 
 # Create new user to run app process as unprivileged user

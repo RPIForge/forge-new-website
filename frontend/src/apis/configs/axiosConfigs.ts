@@ -2,19 +2,23 @@
 import axios from "axios"
 import { AuthAPI } from "../AuthAPI";
 
+// Relative path: works on localhost (Vite proxy) and on beta.rpiforge.dev (Caddy proxy).
+// Override with VITE_API_URL at build time if the API ever lives on another host.
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+
 
 export const api = axios.create({
     withCredentials: true,
-    baseURL: "http://localhost:3000/api",
+    baseURL: API_BASE_URL,
 });
 
 export const authApi = axios.create({
-    baseURL: "http://localhost:3000/api",
+    baseURL: API_BASE_URL,
     withCredentials: true,
 });
 
 export const publicApi = axios.create({
-    baseURL: "http://localhost:3000/api"
+    baseURL: API_BASE_URL
 });
 
 api.interceptors.request.use(

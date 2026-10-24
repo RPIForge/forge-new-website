@@ -6,7 +6,8 @@ import path from "path"
 export default defineConfig({
     assetsInclude: ["**/*.glb"],
     // depending on your application, base can also be "/"
-    base: '',
+    // '/' so assets load correctly on deep links (BrowserRouter) in production
+    base: '/',
     resolve: {
         alias: {
             "src": path.resolve(import.meta.dirname, "src"),

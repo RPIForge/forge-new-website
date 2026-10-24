@@ -1,0 +1,24 @@
+# Serves the built frontend and proxies /api to FastAPI.
+# Caddy gets and renews the HTTPS certificate automatically.
+{$SITE_DOMAIN:beta.rpiforge.dev} {
+	encode zstd gzip
+
+	# Beta: keep it out of search engines (remove these when it becomes the main site)
+	header X-Robots-Tag "noindex, nofollow"
+	handle /robots.txt {
+		respond `User-agent: *
+Disallow: /` 200
+	}
+
+	# /api/foo -> backend:8000/foo (same as the Vite dev proxy)
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# React app; unknown paths fall back to index.html for client-side routing
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

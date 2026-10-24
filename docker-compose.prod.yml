@@ -1,0 +1,62 @@
+# Production stack for beta.rpiforge.dev on the Azure VM.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Needs these files on the server (never commit them):
+#   backend/.env.prod     (copy backend/.env.prod.example)
+#   database/.env.prod    (copy database/.env.prod.example)
+#   discordbot/.env.prod  (copy discordbot/.env.prod.example)
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    env_file:
+      - ./database/.env.prod
+    environment:
+      PGDATA: /var/lib/postgresql/18/docker
+    volumes:
+      - postgres_data:/var/lib/postgresql/18/docker
+    # No ports published: only reachable by other containers
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      - ENVIRONMENT=PRD
+      - DEFAULT_DATABASE_HOSTNAME=postgres
+      - DEFAULT_DATABASE_PORT=5432
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      - SITE_DOMAIN=beta.rpiforge.dev
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data      # HTTPS certificates - keep this volume
+      - caddy_config:/config
+
+  discordbot:
+    build: ./discordbot
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - ./discordbot/.env.prod
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
