@@ -5,7 +5,6 @@
 # Needs these files on the server (never commit them):
 #   backend/.env.prod     (copy backend/.env.prod.example)
 #   database/.env.prod    (copy database/.env.prod.example)
-#   discordbot/.env.prod  (copy discordbot/.env.prod.example)
 
 services:
   postgres:
@@ -47,14 +46,6 @@ services:
     volumes:
       - caddy_data:/data      # HTTPS certificates - keep this volume
       - caddy_config:/config
-
-  discordbot:
-    build: ./discordbot
-    restart: unless-stopped
-    depends_on:
-      - backend
-    env_file:
-      - ./discordbot/.env.prod
 
 volumes:
   postgres_data:
