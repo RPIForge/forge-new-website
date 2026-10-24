@@ -1,5 +1,6 @@
 # Serves the built frontend and proxies /api to FastAPI.
-# Caddy gets and renews the HTTPS certificate automatically.
+# SITE_DOMAIN=:80 -> plain HTTP behind another proxy (current VM setup, nginx does HTTPS)
+# SITE_DOMAIN=beta.rpiforge.dev -> Caddy gets the HTTPS certificate itself
 {$SITE_DOMAIN:beta.rpiforge.dev} {
 	encode zstd gzip
 

@@ -1,6 +1,9 @@
 # Production stack for beta.rpiforge.dev on the Azure VM.
 #
-#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker-compose -f docker-compose.prod.yml up -d --build
+#
+# The VM's existing nginx handles HTTPS (certbot) and forwards
+# beta.rpiforge.dev to 127.0.0.1:8080 - see deploy/nginx/beta.rpiforge.dev.conf
 #
 # Needs these files on the server (never commit them):
 #   backend/.env.prod     (copy backend/.env.prod.example)
@@ -8,7 +11,8 @@
 
 services:
   postgres:
-    image: postgres:18
+    # alpine: the Debian image needs Docker 20.10.10+, the VM has 19.03
+    image: postgres:18-alpine
     restart: unless-stopped
     env_file:
       - ./database/.env.prod
@@ -38,13 +42,11 @@ services:
     depends_on:
       - backend
     environment:
-      - SITE_DOMAIN=beta.rpiforge.dev
+      - SITE_DOMAIN=:80       # plain HTTP; nginx in front does HTTPS
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "127.0.0.1:8080:80"   # only reachable from the VM itself (nginx)
     volumes:
-      - caddy_data:/data      # HTTPS certificates - keep this volume
+      - caddy_data:/data
       - caddy_config:/config
 
 volumes:
