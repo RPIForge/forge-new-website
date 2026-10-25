@@ -1,0 +1,12 @@
+# Production image: build the React app, then serve it with Caddy (auto HTTPS).
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json yarn.lock ./
+RUN yarn install --network-timeout 600000
+COPY . .
+# Calls vite directly: `yarn build` runs `tsc` first, and TypeScript isn't a dependency.
+RUN yarn vite build
+
+FROM caddy:2-alpine
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv

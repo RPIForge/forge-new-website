@@ -43,6 +43,8 @@ services:
   discordbot:
     restart: "unless-stopped"
     build: ./discordbot
+    env_file:
+      - ./discordbot/.env
 
 volumes:
   postgres_data:

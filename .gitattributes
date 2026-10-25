@@ -1,0 +1,4 @@
+# Shell scripts and Caddyfile must keep Linux line endings or containers fail to start
+*.sh text eol=lf
+Caddyfile text eol=lf
+Dockerfile* text eol=lf
