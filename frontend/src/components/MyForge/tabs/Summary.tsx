@@ -86,7 +86,22 @@ const Summary: React.FC = () => {
             }
         };
     
+        // The user saved at login goes stale (e.g. semester_balance after a new usage),
+        // so refresh it whenever the summary is opened.
+        const refreshUser = async () => {
+            try {
+                const response = await AuthAPI.me();
+                if (response.status === 200 && response.data) {
+                    setUser(response.data);
+                    localStorage.setItem("user", JSON.stringify(response.data));
+                }
+            } catch (error) {
+                console.error("Error refreshing user data:", error);
+            }
+        };
+
         getUsages();
+        refreshUser();
     }, []);
     
     useEffect(() => {
