@@ -17,6 +17,9 @@ button {
 #root {
     height: 100vh;
     width: 100%;
+    // The hidden hamburger menu sits just off the right edge on desktop;
+    // clip it so the page doesn't get scroll bars.
+    overflow-x: clip;
     display: flex;
     flex-direction: column;
     position: relative;
