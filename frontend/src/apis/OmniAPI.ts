@@ -1,6 +1,20 @@
 import { api, publicApi } from "./configs/axiosConfigs";
 
 export const OmniAPI = {
+    // Fetch every item of a type. List endpoints return 20 items by default,
+    // so this keeps requesting pages until the last one comes back short.
+    getEvery: async (type: string, params?: Record<string, any>) => {
+        const pageSize = 100;
+        let offset = 0;
+        let items: any[] = [];
+        while (true) {
+            const page = await OmniAPI.getAll(type, { ...params, limit: pageSize, offset });
+            items = items.concat(page);
+            if (!Array.isArray(page) || page.length < pageSize) break;
+            offset += pageSize;
+        }
+        return items;
+    },
     getAll: async (type: string, params?: Record<string, any>) => {
         const response = await api.request({
             url: `/${type}`,
