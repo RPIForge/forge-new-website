@@ -281,19 +281,32 @@ export const DynamicMachineForm: React.FC = () => {
                             value={selectedMachineId === "0" ? "" : selectedMachineId}
                             onValueChange={handleSelectMachine}
                         >
-                            <option className='styled-dropdown-placeholder' value="0" hidden>{"Please Select a Machine"}</option>
-                            {machines.filter((machine: Machine) => canSeeDisabled || !machine.disabled).map((machine: Machine) => (
-                                <option
-                                    className='styled-dropdown-option'
-                                    key={machine.id}
-                                    value={machine.id}
-                                    disabled={machine.maintenance_mode || machine.disabled}
-                                >
-                                    {machine.name}
-                                    {machine.maintenance_mode ? ' (Under Maintenance)' : machine.disabled ? ' (Disabled)' : ''}
-                                </option>
-                            ))}
-                        </select>
+                            <Select.Trigger className="machine-select-trigger" aria-label="Select a machine">
+                                <Select.Value placeholder="Please Select a Machine" />
+                                <Select.Icon aria-hidden>
+                                    <ChevronDownIcon />
+                                </Select.Icon>
+                            </Select.Trigger>
+                            <Select.Portal>
+                                <Select.Content className="machine-select-content" position="popper" sideOffset={4}>
+                                    <Select.Viewport>
+                                        {machines.filter((machine: Machine) => canSeeDisabled || !machine.disabled).map((machine: Machine) => (
+                                            <Select.Item
+                                                className="machine-select-item"
+                                                key={machine.id}
+                                                value={machine.id}
+                                                disabled={machine.maintenance_mode || machine.disabled}
+                                            >
+                                                <Select.ItemText>
+                                                    {machine.name}
+                                                    {machine.maintenance_mode ? ' (Under Maintenance)' : machine.disabled ? ' (Disabled)' : ''}
+                                                </Select.ItemText>
+                                            </Select.Item>
+                                        ))}
+                                    </Select.Viewport>
+                                </Select.Content>
+                            </Select.Portal>
+                        </Select.Root>
                     </div>
                 }
 
