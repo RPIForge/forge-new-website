@@ -71,7 +71,7 @@ export const DynamicMachineForm: React.FC = () => {
      */
     useEffect(() => {
         const fetchMachines = async () => {
-            const allMachines: Machine[] = await OmniAPI.getAll("machines");
+            const allMachines: Machine[] = await OmniAPI.getEvery("machines");
             console.log("All machines:", allMachines);
             setMachines(allMachines);
         };
