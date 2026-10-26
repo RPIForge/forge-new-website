@@ -17,6 +17,14 @@ button {
     all: unset;
 }
 
+// Pages fill the space between the navbar and the footer,
+// so the footer stays at the bottom on short pages.
+.page-content {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+}
+
 #root {
     min-height: 100vh;
     width: 100%;

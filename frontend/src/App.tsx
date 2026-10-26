@@ -46,6 +46,7 @@ export default function App() {
         <Router>
             <NavBar user={user} setAuth={setAuth} isAuthed={isAuthenticated}/>
             <Suspense fallback={<div>Loading...</div>}>
+                <main className="page-content">
                 <Routes>
                     <Route path="/" Component={Home} />
                     <Route path="/status" Component={NewStatus} />
@@ -116,6 +117,8 @@ export default function App() {
                         </div>
                     } />
                 </Routes>
+                </main>
+                <Footer />
             </Suspense>
         </Router>
     );
