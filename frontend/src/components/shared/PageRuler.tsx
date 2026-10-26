@@ -32,8 +32,8 @@ const Strip = styled.div<{
 
   background-color: ${p => p.$color};
 
-  -webkit-mask-image: url(${p => p.$src});
-  mask-image: url(${p => p.$src});
+  -webkit-mask-image: url("${p => p.$src}");
+  mask-image: url("${p => p.$src}");
   -webkit-mask-repeat: repeat-y;
   mask-repeat: repeat-y;
 
