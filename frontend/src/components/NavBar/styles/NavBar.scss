@@ -16,6 +16,8 @@
   overflow: visible;
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .nav-rpi-lockup {
@@ -28,12 +30,10 @@
 }
 
 .nav-forge-sticker {
-  height: 30px;
+  height: 36px;
   width: auto;
   object-fit: contain;
   flex-shrink: 0;
-  position: relative;
-  top: 5px;
 }
 
 .nav-brand-separator {
@@ -65,8 +65,6 @@
   color: nav.$text-color;
   white-space: nowrap;
   letter-spacing: 0.02em;
-  top: 5px;
-  position: relative;
 }
 
 .nav-menu-list {
@@ -322,9 +320,11 @@
     font-size: 0.8rem;
     letter-spacing: 0.01em;
   }
-  .nav-rpi-lockup,
-  .nav-forge-sticker {
+  .nav-rpi-lockup {
     height: 22px;
+  }
+  .nav-forge-sticker {
+    height: 27px;
   }
   .nav-brand-separator {
     height: 30px;
@@ -348,9 +348,11 @@
     min-height: 56px;
     max-height: 56px;
   }
-  .nav-rpi-lockup,
-  .nav-forge-sticker {
+  .nav-rpi-lockup {
     height: 20px;
+  }
+  .nav-forge-sticker {
+    height: 25px;
   }
   .nav-brand-separator {
     height: 28px;

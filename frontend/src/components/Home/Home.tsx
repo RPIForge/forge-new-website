@@ -14,6 +14,7 @@ const Page = styled.div`
 
     display: flex;
     flex-direction: column;
+    flex: 1 0 auto;
 
     @media (max-width: 1049px) {
         --nav-h: 56px;
@@ -22,12 +23,36 @@ const Page = styled.div`
     @media (max-width: 900px) and (min-width: 769px) {
         --bar-h: 98px;
     }
+
+    @media (min-width: 769px) and (orientation: portrait) {
+        --hero-h: max(560px, calc(100svh - var(--nav-h) - var(--bar-h)));
+        --hero-title-size: clamp(64px, 10.5vw, 120px);
+    }
 `;
 
 const Hero = styled(HeroBanner)`
     background: linear-gradient(to right, var(--color-navy-mid) 10.1%, var(--color-red) 100%);
-    flex: 0 0 auto;
+    flex: 1 0 auto;
     min-height: var(--hero-h);
+
+    @media (min-width: 769px) and (orientation: portrait) {
+        flex-direction: column;
+
+        & > div:has(h1) {
+            width: 100%;
+            justify-content: flex-start;
+            padding: clamp(48px, 7svh, 96px) 48px 0 clamp(100px, 13vw, 140px);
+        }
+
+        & > div:has(> img) {
+            -webkit-mask-image: linear-gradient(to bottom, transparent 35%, black 60%);
+            mask-image: linear-gradient(to bottom, transparent 35%, black 60%);
+
+            img {
+                object-position: right bottom;
+            }
+        }
+    }
 
     @media (max-width: 768px) {
         min-height: 0;
