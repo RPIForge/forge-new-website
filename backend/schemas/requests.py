@@ -94,7 +94,7 @@ class MachineUsageRequest(BaseRequest):
     # Map resource slot id to resource usage quantity details
     resource_usages: dict[UUID4, ResourceUsage]
     duration_seconds: int
-    as_org_id: Optional[UUID4]
+    as_org_id: Optional[UUID4] = None
 
 
 class MachineGetTypeRequest(BaseRequest):

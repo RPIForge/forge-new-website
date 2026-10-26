@@ -177,7 +177,7 @@ export const DynamicMachineForm: React.FC = () => {
         const duration_seconds = Math.ceil((formData.hours * 3600) + (formData.minutes * 60));
         console.log("Resource Usages:", resource_usages);
         const usageData = {
-            as_org_id: formData.org ? formData.org : null,
+            as_org_id: null,
             duration_seconds: duration_seconds,
             resource_usages: resource_usages,
         };
@@ -206,6 +206,12 @@ export const DynamicMachineForm: React.FC = () => {
                 updateStatus("The selected machine does not exist.", "error");
             } else if (error.status == 403) {
                 updateStatus("You are not permitted to use this machine.", "error");
+            } else if (error.status == 422) {
+                const problems = Array.isArray(error?.response?.data?.detail)
+                    ? error.response.data.detail.map((d: any) => `${(d.loc ?? []).slice(1).join(' → ')}: ${d.msg}`).join('; ')
+                    : detail;
+                console.error("Usage form rejected:", error?.response?.data);
+                updateStatus(`Some of the form data was invalid${problems ? ` (${problems})` : ''}. Please check the form and try again.`, "error");
             } else {
                 updateStatus("An error occurred. Please try again.", "error");
             }
@@ -363,7 +369,7 @@ export const DynamicMachineForm: React.FC = () => {
                             id='checkbox-org-usage'
                             className='styled-checkbox'
                             type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'org': e.target.value }))}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, 'org': e.target.checked }))}
                         />
                         <label
                             htmlFor='checkbox-org-usage'
@@ -376,7 +382,7 @@ export const DynamicMachineForm: React.FC = () => {
                             id='checkbox-reprint'
                             className='styled-checkbox'
                             type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint': e.target.value }))}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint': e.target.checked }))}
                         />
                         <label
                             htmlFor='checkbox-reprint'
