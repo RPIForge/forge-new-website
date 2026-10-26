@@ -21,12 +21,6 @@ const Hours = lazy(() => import('./components/Hours/Hours'));
 const Wiki = lazy(() => import('./components/Learn/Wiki'));
 const AboutUs = lazy(() => import('./components/AboutUs/AboutUs'));
 
-// import Home from './components/Home/Home';
-// import NewStatus from './components/Status/NewStatus';
-// import Login from './components/Forms/Login';
-// import Register from './components/Forms/Register';
-// import ComingSoon from './components/Home/ComingSoon';
-
 let partyMode: boolean = false;
 const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a', 'Enter'];
 let pressedKeys: string[] = [];
@@ -43,7 +37,6 @@ document.addEventListener('keydown', (event) => {
         })
     }
 });
-
 
 export default function App() {
 
@@ -65,13 +58,27 @@ export default function App() {
                             <VerifyEmail />
                         </ProtectedRoute>
                     } />
+                    <Route path="/hours" Component={Hours} />
+
+                    {/* Legacy learn routes */}
                     <Route path="/learn" Component={Wiki} />
                     <Route path="/learn/about" Component={AboutUs} />
                     <Route path="/learn/3d-printing-guide" Component={ComingSoon} />
                     <Route path="/learn/laser-engraving-guide" Component={ComingSoon} />
                     <Route path="/learn/sticker-preparation" Component={ComingSoon} />
                     <Route path="/learn/troubleshooting" Component={ComingSoon} />
-                    <Route path="/hours" Component={Hours} />
+
+                    {/* New UX routes — pages coming soon */}
+                    <Route path="/getting-started" Component={ComingSoon} />
+                    <Route path="/faq/etiquette" Component={ComingSoon} />
+                    <Route path="/faq/materials" Component={ComingSoon} />
+                    <Route path="/faq/about" Component={ComingSoon} />
+                    <Route path="/admin" element={
+                        <ProtectedRoute>
+                            <ComingSoon />
+                        </ProtectedRoute>
+                    } />
+
                     <Route path="/myforge/*" element={
                         <ProtectedRoute>
                             <MyForge />
@@ -110,7 +117,6 @@ export default function App() {
                     } />
                 </Routes>
             </Suspense>
-            {/* <Footer /> */}
         </Router>
     );
 }

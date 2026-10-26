@@ -42,6 +42,8 @@ $white-a11: rgba(255, 255, 255, 1);
 }
 
 .home-cover {
+    // Fill the whole hero now that #root uses min-height instead of a fixed height
+    flex: 1 1 auto;
     align-items: flex-start !important;
     padding-left: 5%;
 
