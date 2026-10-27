@@ -99,6 +99,7 @@ export interface MachineUsage {
     duration: number
     machine_name: string
     cost: number
+    is_reprint?: boolean | string
 };
 
 export interface Resource {

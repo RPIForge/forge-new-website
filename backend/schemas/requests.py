@@ -95,6 +95,7 @@ class MachineUsageRequest(BaseRequest):
     resource_usages: dict[UUID4, ResourceUsage]
     duration_seconds: int
     as_org_id: Optional[UUID4] = None
+    is_reprint: bool = False
 
 
 class MachineGetTypeRequest(BaseRequest):

@@ -48,7 +48,7 @@ export const DynamicMachineForm: React.FC = () => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState<string>("0");
     const [schema, setSchema] = useState<MachineSchemaResponse>({});
-    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, org: false, reprint: false });
+    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, reprint: false });
     const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>([{
         slot_id: "_",
         name: "_",
@@ -185,6 +185,7 @@ export const DynamicMachineForm: React.FC = () => {
             as_org_id: null,
             duration_seconds: duration_seconds,
             resource_usages: resource_usages,
+            is_reprint: formData.reprint,
         };
 
         console.log("Usage Data:", usageData);
@@ -259,7 +260,7 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 1000);
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 2000);
             if (bigSlot) {
                 amountWarning = bigSlot.own
                     ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
@@ -363,7 +364,7 @@ export const DynamicMachineForm: React.FC = () => {
                             id='checkbox-usage-policy'
                             className='styled-checkbox'
                             type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'policy': e.target.value }))}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, 'policy': e.target.checked }))}
                         />
                         <label
                             htmlFor='checkbox-usage-policy'
@@ -372,19 +373,6 @@ export const DynamicMachineForm: React.FC = () => {
                             <span style={{ color: 'red' }}>*</span>
                             Do you agree to the Machine Usage Policy? 
                         </label>
-                        <input
-                            id='checkbox-org-usage'
-                            className='styled-checkbox'
-                            type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'org': e.target.checked }))}
-                        />
-                        <label
-                            htmlFor='checkbox-org-usage'
-                            className='checkbox-label'
-                        >
-                            Is this machine usage for an organization?
-                        </label>
-
                         <input
                             id='checkbox-reprint'
                             className='styled-checkbox'

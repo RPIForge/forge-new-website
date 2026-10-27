@@ -244,7 +244,7 @@ const ListObject = ({ id, name, value }: ListObjectProps) => {
             <ul>
                 {value.map((usage) => (
                     <li key={usage.time_started.toString()}>
-                        <strong>{usage.machine_name}</strong> - {usage.time_started.toString()} - ${Number(usage.cost).toFixed(2)}
+                        <strong>{usage.machine_name}</strong> - {usage.time_started.toString()} - ${Number(usage.cost).toFixed(2)}{usage.is_reprint ? ' (reprint)' : ''}
                     </li>
                 ))}
             </ul>

@@ -41,6 +41,8 @@ class MachineUsage(Base):
     failed: Mapped[bool] = mapped_column(default=False)
     failed_at: Mapped[Optional[datetime]]
 
+    is_reprint: Mapped[bool] = mapped_column(default=False, server_default="false")
+
     cost: Mapped[Decimal] = mapped_column(DECIMAL(precision=10, scale=5))
 
     resources_used: Mapped[list["ResourceUsageQuantity"]] = relationship(
