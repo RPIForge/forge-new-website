@@ -245,6 +245,8 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if resource is selected
+        let amountWarning = "";
+
         if (page == 3) {
             const invalidSlot = slotValues.find((slot) => validateResourceUsage(slot));
             if (invalidSlot) {
@@ -252,21 +254,17 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            var invalidAmount = false;
+            if (slotValues.some((slot) => Number(slot.amount) < 0)) {
+                updateStatus("Please enter a valid amount of material", "error");
+                return;
+            }
 
-            slotValues.forEach((slot) => {
-                if (slot.amount < 0) {
-                    updateStatus("Please enter a valid amount of material", "error");
-                    invalidAmount = true;
-                }
-                if (slot.amount > 1000 && !slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`, "warning");
-                } else if (slot.amount > 1000 && slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`, "warning");
-                }
-            });
-
-            if (invalidAmount) return;
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 1000);
+            if (bigSlot) {
+                amountWarning = bigSlot.own
+                    ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
+                    : `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`;
+            }
         }
 
         //Check if duration is valid
@@ -275,7 +273,11 @@ export const DynamicMachineForm: React.FC = () => {
             return;
         }
 
-        clearStatus();
+        if (amountWarning) {
+            updateStatus(amountWarning, "warning");
+        } else {
+            clearStatus();
+        }
         setPage(page);
     };
 
@@ -398,7 +400,7 @@ export const DynamicMachineForm: React.FC = () => {
                     </div>
                 }
 
-                <div id="status-text" className={`status-text ${status.type === "success" ? "success" : status.type === "error" ? "error" : ""}`}>{status.text}</div>
+                <div id="status-text" className={`status-text ${status.type === "success" ? "success" : status.type === "error" ? "error" : status.type === "warning" ? "warning" : ""}`}>{status.text}</div>
                 <div className="pagination-buttons">
                     <button type="button" onClick={() => {clearStatus(); setPage(page - 1)}} disabled={page === 1}>Back</button>
                     {page !== 4 && <button type="button" onClick={() => handlePageChange(page + 1)} disabled={page === 4}>Next</button>}
