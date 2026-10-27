@@ -150,6 +150,11 @@ export const DynamicMachineForm: React.FC = () => {
     }
     function clearStatus() {updateStatus("", "");}
 
+    const toCount = (value: unknown) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+    };
+
     /**
      * Handle Form Submission
      */
@@ -174,7 +179,7 @@ export const DynamicMachineForm: React.FC = () => {
             }
         });
 
-        const duration_seconds = Math.ceil((formData.hours * 3600) + (formData.minutes * 60));
+        const duration_seconds = Math.ceil((toCount(formData.hours) * 3600) + (toCount(formData.minutes) * 60));
         console.log("Resource Usages:", resource_usages);
         const usageData = {
             as_org_id: null,
@@ -265,7 +270,7 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if duration is valid
-        if (page == 4 && ((formData.hours == 0 && formData.minutes == 0) || formData.hours < 0 || formData.minutes < 0)) {
+        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0)) {
             updateStatus("Please enter a valid duration.", "error");
             return;
         }
@@ -332,7 +337,7 @@ export const DynamicMachineForm: React.FC = () => {
                             min="0"
                             placeholder="Hours"
                             onChange={(e) => setFormData((prev) => ({ ...prev, 'hours': e.target.valueAsNumber }))}
-                            value={formData.hours}
+                            value={Number.isNaN(formData.hours) ? '' : formData.hours}
                         />
                         <label htmlFor="hours">hr</label>
                         <input
@@ -344,7 +349,7 @@ export const DynamicMachineForm: React.FC = () => {
                             min="0"
                             placeholder="Minutes"
                             onChange={(e) => setFormData((prev) => ({ ...prev, 'minutes': e.target.valueAsNumber }))}
-                            value={formData.minutes}
+                            value={Number.isNaN(formData.minutes) ? '' : formData.minutes}
                         />
                         <label htmlFor="minutes">min</label>
                     </div>
