@@ -45,15 +45,6 @@ export interface UserCharge {
     is_graduating: boolean;
 }
 
-export interface Resource {
-    id: string;
-    name: string;
-    brand?: string;
-    color?: string;
-    units: string;
-    cost: number;
-};
-
 export interface Semester {
     id: string;
     semester_type: number | string;
@@ -68,13 +59,3 @@ export interface Role {
     display_role: boolean;
     priority: number;
 }
-
-export interface ResourceSlot {
-    id: string;
-    name: string;
-    db_name: string; // this NEEDS to be changed
-    display_name: string;
-    valid_resource_ids: string[];
-    allow_own_material: boolean;
-    allow_empty: boolean;
-};

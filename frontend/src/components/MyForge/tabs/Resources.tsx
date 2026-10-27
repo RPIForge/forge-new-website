@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react';
 import { useState } from 'react';
-import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE } from '../components/Table';
-import { Resource } from 'src/interfaces';
+import Table, {DEFAULT_PAGINATION, features, TableHead} from '../components/Table';
+import { Resource } from 'src/interfaces/resources';
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
@@ -11,17 +11,18 @@ import '../styles/TabStyles.scss';
 
 import {Cross2Icon, PlusIcon} from "@radix-ui/react-icons";
 import * as Dialog from '@radix-ui/react-dialog';
+import { createColumnHelper, PaginationState } from '@tanstack/react-table';
+import { useResources, useResourcesCount } from 'src/hooks/useResources';
 
 interface aemenuprops {
     isDialogOpen: boolean;
     setIsDialogOpen: (open: boolean) => void;
     resource: Resource | null;
     setResource: (resource: Resource | null) => void;
-    refresh: () => void;
 }
 
 const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource | null) => void] =>  {
-    let { isDialogOpen, setIsDialogOpen, resource, setResource, refresh} = props;
+    let { isDialogOpen, setIsDialogOpen, resource, setResource} = props;
     
     const { hasPermission } = useAuth();
     const canCreate = hasPermission(UserPermission.CAN_CREATE_RESOURCES);
@@ -29,45 +30,37 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
 
     const [name, setName] = useState("");
-    const [brand, setBrand] = useState("");
-    const [color, setColor] = useState("");
     const [units, setUnits] = useState("");
     const [cost, setCost] = useState(0);
 
     const setOpenExtra = (state: boolean, res: Resource | null) => {
-            setResource(res);
-            if (res != null) {
-                console.log("resource not null");
-                setName(res.name);
-                setBrand(res.brand?res.brand:"");
-                setColor(res.color?res.color:"");
-                setUnits(res.units?res.units:"");
-                setCost(res.cost?res.cost:0);
-            } else {
-                console.log("resource is null");
-                setName("");
-                setBrand("");
-                setColor("");
-                setUnits("");
-                setCost(0);
-            }
-            if (isDialogOpen != state) setIsDialogOpen(state);
-        };
+        setResource(res);
+        if (res != null) {
+            setName(res.name);
+            setUnits(res.units?res.units:"");
+            setCost(res.cost?res.cost:0);
+        } else {
+            setName("");
+            setUnits("");
+            setCost(0);
+        }
+        if (isDialogOpen != state) setIsDialogOpen(state);
+    };
 
     function create() {
         if (!canCreate) {
             alert("You do not have the permissions to create resources");
             return;
         }
-        if (name == "" || brand == "" || color == "" || units == "") {
+        if (name == "" || units == "") {
             alert("All fields must be populated!");
             return;
         }
-        OmniAPI.create("resources", {name: name, brand: brand, color: color, units: units, cost: cost})
-        .then( () => {
-            refresh();
-            setOpenExtra(false, null);
-        });
+        // OmniAPI.create("resources", {name: name, brand: brand, color: color, units: units, cost: cost})
+        // .then( () => {
+        //     refresh();
+        //     setOpenExtra(false, null);
+        // });
     };
     
     function edit() {
@@ -76,9 +69,9 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
             return;
         }
         if (resource == null) {return}
-        OmniAPI.edit("resources", resource.id, {name: name, brand: brand, color: color, units: units, cost: cost})
+        OmniAPI.edit("resources", resource.id, {name: name, units: units, cost: cost})
         .then( () => {
-            refresh();
+            // refresh();
             setOpenExtra(false, null);
         });
     }
@@ -105,12 +98,6 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
                                 <label className="Label" htmlFor="name">Name</label>
                                 <input className="Input" id="name" value={name} onChange={e => setName(e.target.value)} maxLength={100}/>
 
-                                <label className="Label" htmlFor="brand">Brand</label>
-                                <input className="Input" id="brand" value={brand} onChange={e => setBrand(e.target.value)} maxLength={100}/>
-
-                                <label className="Label" htmlFor="color">Color</label>
-                                <input className="Input" id="color" value={color} onChange={e => setColor(e.target.value)} maxLength={100}/>
-
                                 <label className="Label" htmlFor="units">Units</label>
                                 <input className="Input" id="units" value={units} onChange={e => setUnits(e.target.value)} maxLength={16}/>
 
@@ -129,41 +116,39 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
     ), setOpenExtra];
 }
 
+const columnHelper = createColumnHelper<typeof features, Resource>();
+const columns = columnHelper.columns([
+    columnHelper.accessor('name', {
+        header: 'Name'
+    }),
+    columnHelper.accessor('units', {
+        header: 'Units'
+    }),
+    columnHelper.accessor('cost', {
+        header: 'Cost'
+    }),
+]);
 
 const Resources: React.FC = () => {
     const { hasPermission } = useAuth();
     const canDelete = hasPermission(UserPermission.CAN_DELETE_RESOURCES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_RESOURCES);
 
-    const [data, setData] = React.useState<Resource[]>([]);
-    const columns: (keyof Resource)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof Resource)[]).filter((key) => !key.includes('_id') && key !== 'id') : [];
-    const [currentPage, setCurrentPage] = useState(1);
+    const [page, setPage] = useState<PaginationState>(DEFAULT_PAGINATION);
+    const {data} = useResources(page);
+    const {data: rowCount} = useResourcesCount();
 
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll("resources", { limit: ITEMS_PER_PAGE, offset }).then( (data) => {
-            setData(data);
-            setCurrentPage(page);
-        });
-    };
-
-    React.useEffect(() => {
-        fetchPage(1);
-    }, []);
-
-    const refreshPage = () => fetchPage(currentPage);
-
-    const onDelete = (index_local: number, index_real: number) => {
+    const onDelete = (id: string) => {
         if (!canDelete) {
             alert("You do not have the permissions to delete resources");
             return;
         }
-        DeleteItem("resources", data[index_real], refreshPage);
+        // DeleteItem("resources", data[index_real], refreshPage);
     };
 
     let [resource, setResource]:[Resource | null, (resource: any) => void] = useState(null);
     let [isDialogOpen, setIsDialogOpen] = useState(false);
-    let [ae, setOpen] = aemenu({isDialogOpen, setIsDialogOpen, resource, setResource, refresh: refreshPage});
+    let [ae, setOpen] = aemenu({isDialogOpen, setIsDialogOpen, resource, setResource});
 
     return (
         <div className='tab-column-cover align-center'>
@@ -175,13 +160,13 @@ const Resources: React.FC = () => {
             <Table<Resource>
                 columns={columns}
                 data={data}
+                pagination={page}
+                onPaginationChange={setPage}
+                rowCount={rowCount}
                 onDelete={onDelete}
                 onEdit={(e) => { setOpen(true, e);}}
                 canEdit={canEdit}
                 canDelete={canDelete}
-                currentPage={currentPage}
-                onPageChange={fetchPage}
-                resourceType="resources"
             />
         </div>
     );
