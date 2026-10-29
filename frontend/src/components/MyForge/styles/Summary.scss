@@ -8,6 +8,10 @@
     background-color: um.$gray-background;
 }
 
+.tab-container:has(> .mf-flex-container) {
+    overflow-y: auto;
+}
+
 .mf-grid {
     height: 100%;
     width: 100%;
