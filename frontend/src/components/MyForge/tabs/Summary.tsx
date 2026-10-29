@@ -158,18 +158,15 @@ const Summary: React.FC = () => {
         flexDirection: 'column',
         justifyContent: 'space-around',
         padding: '10px',
-        height: '100vh', 
-        width: '100%', 
-        boxSizing: 'border-box', 
+        width: 'inherit',
     } as React.CSSProperties;
 
     const rowStyle = {
         display: 'flex',
-        flex: '1 1 0%',     
-        minHeight: 0,   
-        width: '100%'
+        justifyContent: 'space-around',
+        gap: '10px',
+        padding: '10px'
     } as React.CSSProperties;
-
 
     return (
         <div className='mf-flex-container' style={flexStyle}>
