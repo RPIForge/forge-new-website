@@ -100,6 +100,11 @@ export default function Register() {
             return;
         }
 
+        if (formValues["rcsid"].length > 8){
+            alert("Invalid RCS ID");
+            return;
+        }
+
         //Check Password length
         if (formValues["password"].length < 5) {
             alert("Password must be at least 5 characters");
