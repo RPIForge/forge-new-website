@@ -260,7 +260,7 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 2000);
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 1000);
             if (bigSlot) {
                 amountWarning = bigSlot.own
                     ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
