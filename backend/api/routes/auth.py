@@ -42,7 +42,7 @@ async def login_user(
 ) -> AccessTokenResponse:
     """Check if user credentials are valid. If they are, create and return an access token."""
 
-    user = await session.scalar(select(User).where(User.RCSID == form_data.username))
+    user = await session.scalar(select(User).where(User.RCSID == form_data.username.lower()))
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise AUTH_FAILED_ERROR
 
