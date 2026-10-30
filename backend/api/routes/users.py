@@ -17,7 +17,7 @@ from models.auth_token import AuthToken
 from models.role import Role
 from models.user import User
 from schemas.enums import LogType, Permissions, TokenType
-from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest
+from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest, UserEditRequest
 from schemas.responses import BasicUserResponse, UserNoHash
 
 from core.security import get_password_hash
@@ -494,6 +494,76 @@ async def change_user_role(
 # GET ALL USERS
 
 # EDIT USER PREFERENCES
+@router.post("/users/edit/{user_id}")
+async def edit_user(
+    user_id: UUID,
+    request: UserEditRequest,
+    session: DBSession,
+    current_user: Annotated[
+        User, Depends(PermittedUserChecker({Permissions.CAN_EDIT_USERS}))
+    ],
+) -> None:
+    """Edit another user's details"""
+
+    user = await session.scalar(
+        select(User).where(User.id == user_id)
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with provided ID not found",
+        )
+
+    conflicting_users = await session.scalar(
+        select(User).where(and_(or_(User.RCSID == request.RCSID, User.RIN == request.RIN), User.id != user.id))
+    )
+    if conflicting_users is not None:
+        raise HTTPException(
+            status_code=409, 
+            detail="A user with that RCSID or RIN already exists",
+        )
+
+    needs_audit_log = False
+
+    logContent = dict()
+
+    if request.is_rpi_staff is not None:
+        user.is_rpi_staff = request.is_rpi_staff
+    if request.RCSID is not None:
+        if user.RCSID != request.RCSID:
+            needs_audit_log = True
+            logContent["target_old_rcsid"] = user.RCSID
+            logContent["target_new_rcsid"] = request.RCSID
+        user.RCSID = request.RCSID
+    if request.RIN is not None:
+        if user.RIN != request.RIN:
+            needs_audit_log = True
+            logContent["target_old_rin"] = user.RIN
+            logContent["target_new_rin"] = request.RIN
+        user.RIN = request.RIN
+    if request.first_name is not None:
+        user.first_name = request.first_name
+    if request.last_name is not None:
+        user.last_name = request.last_name
+    if request.major is not None:
+        user.major = request.major
+    if request.gender_identity is not None:
+        user.gender_identity = request.gender_identity
+    if request.pronouns is not None:
+        user.pronouns = request.pronouns
+    if request.is_graduating is not None:
+        user.is_graduating = request.is_graduating
+
+    if needs_audit_log:
+        logContent["user_rcsid"] = current_user.RCSID
+        audit_log = AuditLog(
+            type=LogType.USER_EDITED,
+            content=logContent,
+        )
+
+        session.add(audit_log)
+
+    await session.commit()
 
 # EDIT USER SECURE DETAILS
 
