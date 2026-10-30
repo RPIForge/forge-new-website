@@ -480,6 +480,11 @@ async def change_user_role(
         )
 
     if request.should_have_role:
+        if not user.is_email_verified:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot grant roles to unverified users",
+            )
         if role not in user.roles:
             user.roles.append(role)
             session.add(user)
