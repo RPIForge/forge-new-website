@@ -34,6 +34,23 @@ class UserCreateRequest(BaseRequest):
     is_graduating: bool
 
 
+class UserEditRequest(BaseRequest):
+    user_id: UUID4
+
+    is_rpi_staff: Optional[bool]
+
+    RCSID: Optional[str]
+    RIN: Optional[RIN]
+
+    first_name: Optional[str]
+    last_name: Optional[str]
+
+    major: Optional[str]
+    gender_identity: Optional[GenderStatsType]
+
+    pronouns: Optional[PronounType]
+
+    is_graduating: Optional[bool]
 class UserUpdatePasswordRequest(BaseRequest):
     password: SecretStr
 
