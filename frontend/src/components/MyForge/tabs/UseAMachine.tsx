@@ -261,7 +261,7 @@ export const DynamicMachineForm: React.FC = () => {
             }
 
             const bigSlot = slotValues.find((slot) => Number(slot.amount) > 1000);
-            if (slotValues.find((slot) => Number(slot.amount) > 2000)){
+            if (slotValues.find((slot) => Number(slot.amount) > 1950)){
                 updateStatus("Exceding the ammount of filament that is allowed on one print in the Forge", "error");
                 return;
             }
