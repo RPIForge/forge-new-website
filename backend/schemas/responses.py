@@ -218,6 +218,7 @@ class UsageResponse(BaseResponse):
     duration: int
     machine_name: str
     cost: Decimal
+    is_reprint: bool = False
 
 
 class MachineInfo(BaseModel):

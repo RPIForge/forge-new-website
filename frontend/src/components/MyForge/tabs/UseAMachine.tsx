@@ -48,7 +48,7 @@ export const DynamicMachineForm: React.FC = () => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState<string>("0");
     const [schema, setSchema] = useState<MachineSchemaResponse>({});
-    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, org: false, reprint: false });
+    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, reprint: false });
     const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>([{
         slot_id: "_",
         name: "_",
@@ -150,6 +150,11 @@ export const DynamicMachineForm: React.FC = () => {
     }
     function clearStatus() {updateStatus("", "");}
 
+    const toCount = (value: unknown) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+    };
+
     /**
      * Handle Form Submission
      */
@@ -174,12 +179,13 @@ export const DynamicMachineForm: React.FC = () => {
             }
         });
 
-        const duration_seconds = Math.ceil((formData.hours * 3600) + (formData.minutes * 60));
+        const duration_seconds = Math.ceil((toCount(formData.hours) * 3600) + (toCount(formData.minutes) * 60));
         console.log("Resource Usages:", resource_usages);
         const usageData = {
-            as_org_id: formData.org ? formData.org : null,
+            as_org_id: null,
             duration_seconds: duration_seconds,
             resource_usages: resource_usages,
+            is_reprint: formData.reprint,
         };
 
         console.log("Usage Data:", usageData);
@@ -206,6 +212,12 @@ export const DynamicMachineForm: React.FC = () => {
                 updateStatus("The selected machine does not exist.", "error");
             } else if (error.status == 403) {
                 updateStatus("You are not permitted to use this machine.", "error");
+            } else if (error.status == 422) {
+                const problems = Array.isArray(error?.response?.data?.detail)
+                    ? error.response.data.detail.map((d: any) => `${(d.loc ?? []).slice(1).join(' → ')}: ${d.msg}`).join('; ')
+                    : detail;
+                console.error("Usage form rejected:", error?.response?.data);
+                updateStatus(`Some of the form data was invalid${problems ? ` (${problems})` : ''}. Please check the form and try again.`, "error");
             } else {
                 updateStatus("An error occurred. Please try again.", "error");
             }
@@ -234,6 +246,8 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if resource is selected
+        let amountWarning = "";
+
         if (page == 3) {
             const invalidSlot = slotValues.find((slot) => validateResourceUsage(slot));
             if (invalidSlot) {
@@ -241,30 +255,30 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            var invalidAmount = false;
+            if (slotValues.some((slot) => Number(slot.amount) < 0)) {
+                updateStatus("Please enter a valid amount of material", "error");
+                return;
+            }
 
-            slotValues.forEach((slot) => {
-                if (slot.amount < 0) {
-                    updateStatus("Please enter a valid amount of material", "error");
-                    invalidAmount = true;
-                }
-                if (slot.amount > 1000 && !slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`, "warning");
-                } else if (slot.amount > 1000 && slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`, "warning");
-                }
-            });
-
-            if (invalidAmount) return;
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 2000);
+            if (bigSlot) {
+                amountWarning = bigSlot.own
+                    ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
+                    : `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`;
+            }
         }
 
         //Check if duration is valid
-        if (page == 4 && ((formData.hours == 0 && formData.minutes == 0) || formData.hours < 0 || formData.minutes < 0)) {
+        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0)) {
             updateStatus("Please enter a valid duration.", "error");
             return;
         }
 
-        clearStatus();
+        if (amountWarning) {
+            updateStatus(amountWarning, "warning");
+        } else {
+            clearStatus();
+        }
         setPage(page);
     };
 
@@ -326,7 +340,7 @@ export const DynamicMachineForm: React.FC = () => {
                             min="0"
                             placeholder="Hours"
                             onChange={(e) => setFormData((prev) => ({ ...prev, 'hours': e.target.valueAsNumber }))}
-                            value={formData.hours}
+                            value={Number.isNaN(formData.hours) ? '' : formData.hours}
                         />
                         <label htmlFor="hours">hr</label>
                         <input
@@ -338,7 +352,7 @@ export const DynamicMachineForm: React.FC = () => {
                             min="0"
                             placeholder="Minutes"
                             onChange={(e) => setFormData((prev) => ({ ...prev, 'minutes': e.target.valueAsNumber }))}
-                            value={formData.minutes}
+                            value={Number.isNaN(formData.minutes) ? '' : formData.minutes}
                         />
                         <label htmlFor="minutes">min</label>
                     </div>
@@ -350,7 +364,7 @@ export const DynamicMachineForm: React.FC = () => {
                             id='checkbox-usage-policy'
                             className='styled-checkbox'
                             type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'policy': e.target.value }))}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, 'policy': e.target.checked }))}
                         />
                         <label
                             htmlFor='checkbox-usage-policy'
@@ -360,23 +374,10 @@ export const DynamicMachineForm: React.FC = () => {
                             Do you agree to the Machine Usage Policy? 
                         </label>
                         <input
-                            id='checkbox-org-usage'
-                            className='styled-checkbox'
-                            type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'org': e.target.value }))}
-                        />
-                        <label
-                            htmlFor='checkbox-org-usage'
-                            className='checkbox-label'
-                        >
-                            Is this machine usage for an organization?
-                        </label>
-
-                        <input
                             id='checkbox-reprint'
                             className='styled-checkbox'
                             type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint': e.target.value }))}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint': e.target.checked }))}
                         />
                         <label
                             htmlFor='checkbox-reprint'
@@ -387,7 +388,7 @@ export const DynamicMachineForm: React.FC = () => {
                     </div>
                 }
 
-                <div id="status-text" className={`status-text ${status.type === "success" ? "success" : status.type === "error" ? "error" : ""}`}>{status.text}</div>
+                <div id="status-text" className={`status-text ${status.type === "success" ? "success" : status.type === "error" ? "error" : status.type === "warning" ? "warning" : ""}`}>{status.text}</div>
                 <div className="pagination-buttons">
                     <button type="button" onClick={() => {clearStatus(); setPage(page - 1)}} disabled={page === 1}>Back</button>
                     {page !== 4 && <button type="button" onClick={() => handlePageChange(page + 1)} disabled={page === 4}>Next</button>}

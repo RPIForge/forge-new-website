@@ -29,7 +29,8 @@ const Usages: React.FC = () => {
                 const formatted = res.map(u => ({
                     ...u,
                     duration: hmsify(Number(u.duration)),
-                    cost: `$${(+u.cost).toFixed(2)}`
+                    cost: `$${(+u.cost).toFixed(2)}`,
+                    is_reprint: u.is_reprint ? 'Yes' : 'No'
                 }));
 
                 setData(formatted);

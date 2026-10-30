@@ -225,12 +225,16 @@ async def use_a_machine(
         if not usage_info.is_own_material:
             total_cost += usage_info.amount * resource_used.cost
 
+    if request.is_reprint:
+        total_cost = 0
+
     machine_usage = MachineUsage(
         machine=machine,
         semester=current_semester,
         user=current_user,
         duration_seconds=request.duration_seconds,
         cost=total_cost,
+        is_reprint=request.is_reprint,
         resources_used=resource_usage_quantities,
     )
     machine.active_usage = machine_usage
