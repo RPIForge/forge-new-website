@@ -262,7 +262,7 @@ export const DynamicMachineForm: React.FC = () => {
 
             const bigSlot = slotValues.find((slot) => Number(slot.amount) > 1000);
             if (slotValues.find((slot) => Number(slot.amount) > 1950)){
-                updateStatus("Exceding the ammount of filament that is allowed on one print in the Forge", "error");
+                updateStatus("Exceeding the amount of filament that is allowed on one print in the Forge", "error");
                 return;
             }
             if (bigSlot) {
@@ -273,7 +273,7 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if duration is valid
-        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0 || toCount(formData.hours) > 48 || toCount(formData.minutes) > 60)) {
+        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0 || toCount(formData.hours) > 48 || toCount(formData.minutes) > 59)) {
             updateStatus("Please enter a valid duration.", "error");
             return;
         }
