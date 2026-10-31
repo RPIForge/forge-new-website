@@ -119,6 +119,12 @@ async def fail_machine(
             detail="This machine does not have an active usage",
         )
 
+    if machine.active_usage.failed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This machine's usage has already been failed",
+        )
+
     audit_log = AuditLog(
         type=LogType.MACHINE_USAGE_FAILED,
         content={

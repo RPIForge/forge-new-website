@@ -29,6 +29,15 @@ export const FailAMachineForm: React.FC = () => {
         fetchMachines();
     }, []);
 
+    const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        OmniAPI.getPublic("machinestatus").then((res: any) => {
+            const all = [...(res?.loners ?? []), ...(res?.groups ?? []).flatMap((g: any) => g.machines ?? [])];
+            setFailedIds(new Set(all.filter((m: any) => m.failed).map((m: any) => m.id)));
+        }).catch(() => setFailedIds(new Set()));
+    }, []);
+
     /**
      * Handle Machine Selection with placeholder protection
      */
@@ -67,11 +76,14 @@ export const FailAMachineForm: React.FC = () => {
             if (response != null) {
                 console.log("Response:", response);
                 alert("An error occurred, please try again.");
+                return;
             }
             alert("Success, machine failure email sent");
-        } catch (error) {
+            setFailedIds((prev) => new Set(prev).add(selectedMachineId));
+        } catch (error: any) {
             console.error("Error:", error);
-            alert("An error occurred, please try again.");
+            alert(error?.response?.data?.detail ?? "An error occurred, please try again.");
+            return;
         } finally {
             setIsSubmitting(false);
         }
@@ -86,6 +98,7 @@ export const FailAMachineForm: React.FC = () => {
      * Reset Form Fields
      */
     const resetFormFields = () => {
+        setSelectedMachineId("_");
         setEstimatedPercentCompleted(0);
         setPrinterErrorMessage("");
         setNoticeableFaults([]);
@@ -105,7 +118,7 @@ export const FailAMachineForm: React.FC = () => {
                     required
                 >
                     <option className='styled-dropdown-placeholder' value="_" hidden>{"Please Select a Machine"}</option>
-                    {machines.map((machine: Machine) => (
+                    {machines.filter((machine) => !failedIds.has(machine.id)).map((machine: Machine) => (
                         <option className='styled-dropdown-option' key={machine.id} value={machine.id}>{machine.name}</option>
                     ))}
                 </select>
