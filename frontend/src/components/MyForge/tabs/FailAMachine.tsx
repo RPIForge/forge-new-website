@@ -29,14 +29,20 @@ export const FailAMachineForm: React.FC = () => {
         fetchMachines();
     }, []);
 
-    const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
+    const [inProgressIds, setInProgressIds] = useState<Set<string>>(new Set());
 
-    useEffect(() => {
+    const loadInProgress = () => {
         OmniAPI.getPublic("machinestatus").then((res: any) => {
             const all = [...(res?.loners ?? []), ...(res?.groups ?? []).flatMap((g: any) => g.machines ?? [])];
-            setFailedIds(new Set(all.filter((m: any) => m.failed).map((m: any) => m.id)));
-        }).catch(() => setFailedIds(new Set()));
+            setInProgressIds(new Set(all.filter((m: any) => m.in_use).map((m: any) => m.id)));
+        }).catch(() => setInProgressIds(new Set()));
+    };
+
+    useEffect(() => {
+        loadInProgress();
     }, []);
+
+    const failableMachines = machines.filter((machine) => inProgressIds.has(machine.id));
 
     /**
      * Handle Machine Selection with placeholder protection
@@ -79,13 +85,13 @@ export const FailAMachineForm: React.FC = () => {
                 return;
             }
             alert("Success, machine failure email sent");
-            setFailedIds((prev) => new Set(prev).add(selectedMachineId));
         } catch (error: any) {
             console.error("Error:", error);
             alert(error?.response?.data?.detail ?? "An error occurred, please try again.");
-            return;
+            if (error?.response?.status !== 502) return;
         } finally {
             setIsSubmitting(false);
+            loadInProgress();
         }
         
         // Clear form
@@ -117,8 +123,8 @@ export const FailAMachineForm: React.FC = () => {
                     onChange={(e) => handleSelectMachine(e.target.value)}
                     required
                 >
-                    <option className='styled-dropdown-placeholder' value="_" hidden>{"Please Select a Machine"}</option>
-                    {machines.filter((machine) => !failedIds.has(machine.id)).map((machine: Machine) => (
+                    <option className='styled-dropdown-placeholder' value="_" hidden>{failableMachines.length ? "Please Select a Machine" : "No machines are in use"}</option>
+                    {failableMachines.map((machine: Machine) => (
                         <option className='styled-dropdown-option' key={machine.id} value={machine.id}>{machine.name}</option>
                     ))}
                 </select>

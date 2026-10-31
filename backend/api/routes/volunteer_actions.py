@@ -142,9 +142,15 @@ async def fail_machine(
     session.add(machine)
     await session.commit()
 
-    await send_failure_email(
-        f"{machine.active_usage.user.RCSID}@rpi.edu",
-        machine.name,
-        str(request.percentage),
-    )
+    try:
+        await send_failure_email(
+            f"{machine.active_usage.user.RCSID}@rpi.edu",
+            machine.name,
+            str(request.percentage),
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The machine was marked as failed, but the email to the user could not be sent.",
+        )
 
