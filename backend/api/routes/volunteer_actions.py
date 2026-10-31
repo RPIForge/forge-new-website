@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Annotated
 from azure.communication.email import EmailClient
@@ -149,6 +150,7 @@ async def fail_machine(
             str(request.percentage),
         )
     except Exception:
+        logging.exception("Failed to send machine failure email")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The machine was marked as failed, but the email to the user could not be sent.",
