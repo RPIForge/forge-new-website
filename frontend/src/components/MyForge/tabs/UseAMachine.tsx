@@ -260,7 +260,11 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 2000);
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 1000);
+            if (slotValues.find((slot) => Number(slot.amount) > 1950)){
+                updateStatus("Exceeding the amount of filament that is allowed on one print in the Forge", "error");
+                return;
+            }
             if (bigSlot) {
                 amountWarning = bigSlot.own
                     ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
@@ -269,7 +273,7 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if duration is valid
-        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0)) {
+        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0 || toCount(formData.hours) > 48 || toCount(formData.minutes) > 59)) {
             updateStatus("Please enter a valid duration.", "error");
             return;
         }
