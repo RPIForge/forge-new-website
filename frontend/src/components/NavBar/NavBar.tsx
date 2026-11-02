@@ -8,7 +8,7 @@ import * as Avatar from "../MyForge/components/Avatar";
 import * as Hamburger from "./Hamburger";
 import { UserPermission } from "src/enums";
 import forgeLockupUrl from "../../assets/img/RPI_Lockup_Eng_Sm.svg?url";
-import forgeLogoUrl from "src/assets/img/logo.svg?url";
+import forgeLogoUrl from "src/assets/img/forge-logo-blue.svg?url";
 import "./styles/UserMenu.scss";
 import "./styles/NavBar.scss";
 

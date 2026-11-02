@@ -25,6 +25,8 @@ export interface HeroBannerProps {
     subtitle?: React.ReactNode;
     variant?: 'hero' | 'banner';
     showAnvil?: boolean;
+    imageSrc?: string;
+    ruler?: React.ReactNode;
     className?: string;
 }
 
@@ -63,7 +65,7 @@ const Root = styled.section<{ $variant: 'hero' | 'banner' }>`
 const BackgroundPattern = styled.div`
     position: absolute;
     inset: 0;
-    background-image: url(${bgPattern});
+    background-image: url("${bgPattern}");
     background-repeat: repeat;
     background-size: 122px 140px;
     opacity: 0.1;
@@ -78,7 +80,7 @@ const MobileAnvilBackground = styled.div`
         display: block;
         position: absolute;
         inset: 0;
-        background-image: url(${anvilMobileImg});
+        background-image: url("${anvilMobileImg}");
         background-size: 72%;
         background-position: right 10% top 8%;
         background-repeat: no-repeat;
@@ -152,25 +154,21 @@ const ContentColumn = styled.div<{ $variant: 'hero' | 'banner' }>`
 const TitleBlock = styled.div``;
 
 const DesktopImagePanel = styled.div`
-    position: relative;
-    flex: 0 0 min(920px, 60%);
-    margin-left: auto;
-    min-width: 0;
-    align-self: stretch;
+    position: absolute;
+    inset: 0;
     overflow: hidden;
+    pointer-events: none;
     z-index: 0;
+    -webkit-mask-image: linear-gradient(to right, transparent 25%, black 55%);
+    mask-image: linear-gradient(to right, transparent 25%, black 55%);
 
     img {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
         object-position: right center;
-    }
-
-    @media (max-width: ${breakpoints.tablet}) and (min-width: 769px) {
-        flex: 0 1 52%;
     }
 
     @media (max-width: ${breakpoints.mobile}) {
@@ -184,7 +182,7 @@ const BannerAnvilAccent = styled.div`
     top: 0;
     bottom: 0;
     width: 45%;
-    background-image: url(${anvilDesktopImg});
+    background-image: url("${anvilDesktopImg}");
     background-size: contain;
     background-position: right center;
     background-repeat: no-repeat;
@@ -203,6 +201,8 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
     subtitle,
     variant = 'hero',
     showAnvil = true,
+    imageSrc,
+    ruler,
     className,
 }) => {
     const isHero   = variant === 'hero';
@@ -229,11 +229,13 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
 
             {isHero && showAnvil && (
                 <DesktopImagePanel>
-                    <img src={anvilDesktopImg} alt="The Forge makerspace tools and equipment" />
+                    <img src={imageSrc ?? anvilDesktopImg} alt="The Forge makerspace tools and equipment" />
                 </DesktopImagePanel>
             )}
 
-            <PageRuler src={rulerMask} side="left" color={colors.white} zIndex={4} />
+            {ruler !== undefined
+                ? ruler
+                : <PageRuler src={rulerMask} side="left" color={colors.white} zIndex={4} />}
 
         </Root>
     );
