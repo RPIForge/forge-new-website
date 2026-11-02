@@ -2,16 +2,55 @@ import React, { useEffect, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import useAuth from '../../Auth/useAuth';
 import * as Dialog from "@radix-ui/react-dialog";
-import { PieChart } from 'react-minimal-pie-chart';
-import {ReactComponent as DiscordIcon} from '../../../assets/img/discord-mark-blue.svg'; 
-import { MachineUsage, Semester } from 'src/interfaces';
+import { Link } from "react-router-dom";
+import { MachineUsage } from 'src/interfaces';
+import { UserPermission } from 'src/enums';
 import { OmniAPI } from "src/apis/OmniAPI";
 import { AuthAPI } from "src/apis/AuthAPI";
+import PageRuler from '../../shared/PageRuler';
+import rulerMask from '../../../assets/img/ruler-mask-tile.svg?url';
 import '../styles/Summary.scss';
+import '../styles/Dashboard.scss';
+
+const LOGS_PER_PAGE = 5;
+const SEMESTER_NAMES = ['Fall', 'Spring', 'Summer'];
+
+const money = (value: number | string | undefined | null) => `$${Number(value ?? 0).toFixed(2)}`;
+
+const semesterLabel = (raw: string | null | undefined): string => {
+    if (!raw) return 'No semester';
+    const year = raw.match(/\d{4}/)?.[0] ?? '';
+    const lower = raw.toLowerCase();
+    const name = SEMESTER_NAMES.find((n) => lower.includes(n.toLowerCase()))
+        ?? SEMESTER_NAMES[Number(raw.match(/^\s*(\d)\b/)?.[1] ?? -1)]
+        ?? raw;
+    return year ? `${name} ${year}` : name;
+};
+
+const semesterFromDate = (date: Date): string => {
+    const month = date.getMonth();
+    const name = month <= 4 ? 'Spring' : month <= 7 ? 'Summer' : 'Fall';
+    return `${name} ${date.getFullYear()}`;
+};
+
+const shortDate = (value: string | Date) =>
+    new Date(value).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
+
+const clockTime = (value: Date) =>
+    value.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(' ', '');
+
+const elapsed = (seconds: number) => {
+    const s = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+};
 
 const Summary: React.FC = () => {
 
-    const { user, setUser } = useAuth();
+    const { user, setUser, hasPermission } = useAuth();
     const location = useLocation();
 
     const [currentUsage, setCurrentUsage] = React.useState<MachineUsage | null>(null);
@@ -22,13 +61,10 @@ const Summary: React.FC = () => {
     const graduationPromptHandled = useRef(false);
     const [showEmailVerificationPrompt, setShowEmailVerificationPrompt] = useState(false);
 
-    const [costData, setCostData] = React.useState<ChartUsageData[]>([]);
-    const [hoursData, setHoursData] = React.useState<ChartUsageData[]>([]);
-
-    interface ChartUsageData {
-        machine: string;
-        usage: number;
-    }
+    const [currentSemester, setCurrentSemester] = useState<string>(() => semesterFromDate(new Date()));
+    const [semesterFilter, setSemesterFilter] = useState<string>('');
+    const [page, setPage] = useState(1);
+    const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
         if (graduationPromptHandled.current) return;
@@ -78,14 +114,30 @@ const Summary: React.FC = () => {
     useEffect(() => {
         const getUsages = async () => {
             try {
-                const response = await OmniAPI.get("usages", "me");
-                const data: MachineUsage[] = response;
+                const data: MachineUsage[] = await OmniAPI.getEvery("usages/me", { order_by: "time_started", descending: true });
                 setMachineUsages(data);
             } catch (error) {
                 console.error("Error fetching machine usages:", error);
             }
         };
-    
+
+        const getCurrentUsage = async () => {
+            try {
+                const data: MachineUsage[] = await OmniAPI.get("usages/current", "me");
+                setCurrentUsage(data[0] ?? null);
+                setCount(data.length);
+            } catch (error) {
+                console.error("Error fetching current machine usages:", error);
+            }
+        };
+
+        const getCurrentSemester = async () => {
+            const semester = await OmniAPI.get("semesters", "current").catch(() => null);
+            if (semester?.calendar_year !== undefined) {
+                setCurrentSemester(semesterLabel(`${semester.semester_type} ${semester.calendar_year}`));
+            }
+        };
+
         // The user saved at login goes stale (e.g. semester_balance after a new usage),
         // so refresh it whenever the summary is opened.
         const refreshUser = async () => {
@@ -101,75 +153,56 @@ const Summary: React.FC = () => {
         };
 
         getUsages();
+        getCurrentUsage();
+        getCurrentSemester();
         refreshUser();
     }, []);
-    
-    useEffect(() => {
-        if (machineUsages.length === 0) return;
-    
-        const getChartData = (usages: MachineUsage[]) => {
-            const sums = usages.reduce((acc, usage) => {
-                const machine = usage.machine_name;
-    
-                if (!acc[machine]) {
-                    acc[machine] = { cost: 0, hours: 0 };
-                }
-    
-                acc[machine].cost += Number(usage.cost);
-                acc[machine].hours += Number(usage.duration) / 3600;
-    
-                return acc;
-            }, {} as Record<string, { cost: number; hours: number }>);
-
-            setCostData(Object.entries(sums).map(([machine, { cost }]) => ({ 
-                machine, 
-                usage: cost 
-            })));
-
-            setHoursData(Object.entries(sums).map(([machine, { hours }]) => ({
-                machine, 
-                usage: hours
-            })));
-        };
-    
-        getChartData(machineUsages);
-    }, [machineUsages]);
 
     useEffect(() => {
-        if (machineUsages.length === 0) return;
-   
-        const getCurrentUsage = async () => {
-            try {
-                const response = await OmniAPI.get("usages/current", "me");
-                console.log(response);
-                const data: MachineUsage[] = response;
-                setCurrentUsage(data[0]);
-                setCount(data.length);
-            } catch (error) {
-                console.error("Error fetching current machine usages:", error);
-            }
-        };
-        
-        getCurrentUsage();
-    }, [machineUsages]);
+        if (!currentUsage) return;
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [currentUsage]);
 
-    const flexStyle = {
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-around',
-        padding: '10px',
-        width: 'inherit',
-    } as React.CSSProperties;
+    const semesters = React.useMemo(() => {
+        const labels = new Set<string>();
+        machineUsages.forEach((usage) => labels.add(semesterLabel(usage.semester)));
+        labels.add(currentSemester);
+        return Array.from(labels);
+    }, [machineUsages, currentSemester]);
 
-    const rowStyle = {
-        display: 'flex',
-        justifyContent: 'space-around',
-        gap: '10px',
-        padding: '10px'
-    } as React.CSSProperties;
+    const activeFilter = semesterFilter || currentSemester;
+
+    const filteredUsages = React.useMemo(
+        () => activeFilter === 'all'
+            ? machineUsages
+            : machineUsages.filter((usage) => semesterLabel(usage.semester) === activeFilter),
+        [machineUsages, activeFilter],
+    );
+
+    const pageCount = Math.max(1, Math.ceil(filteredUsages.length / LOGS_PER_PAGE));
+    const safePage = Math.min(page, pageCount);
+    const pageRows = filteredUsages.slice((safePage - 1) * LOGS_PER_PAGE, safePage * LOGS_PER_PAGE);
+
+    const spending = React.useMemo(() => {
+        const totals = new Map<string, number>();
+        machineUsages
+            .filter((usage) => semesterLabel(usage.semester) === currentSemester)
+            .forEach((usage) => totals.set(usage.machine_name, (totals.get(usage.machine_name) ?? 0) + Number(usage.cost)));
+        const rows = Array.from(totals, ([machine, cost]) => ({ machine, cost })).sort((a, b) => b.cost - a.cost);
+        const max = Math.max(...rows.map((row) => row.cost), 0);
+        return rows.map((row) => ({ ...row, share: max > 0 ? row.cost / max : 0 }));
+    }, [machineUsages, currentSemester]);
+
+    const canUseMachines = hasPermission(UserPermission.CAN_USE_MACHINES) || hasPermission(UserPermission.CAN_USE_MACHINES_BETWEEN_SEMESTERS);
+
+    const sessionStart = currentUsage ? new Date(currentUsage.time_started) : null;
+    const sessionEnd = sessionStart && currentUsage
+        ? new Date(sessionStart.getTime() + Number(currentUsage.duration) * 1000)
+        : null;
 
     return (
-        <div className='mf-flex-container' style={flexStyle}>
+        <div className='dash'>
             <Dialog.Root open={showGraduationPrompt} onOpenChange={setShowGraduationPrompt}>
                 <Dialog.Portal>
                     <Dialog.Overlay className="AlertDialogOverlay" />
@@ -207,194 +240,144 @@ const Summary: React.FC = () => {
                     </Dialog.Content>
                 </Dialog.Portal>
             </Dialog.Root>
-            <div className='mf-flex-row' style={rowStyle} >
-                <DisplayObject id='cost' name='Semester Cost' semester_cost={user.semester_balance} />
-                <SingleObject id='current' name='Current Usage' value={currentUsage} count={currentUsageCount} /> 
-            </div>
-            <div className='mf-flex-row' style={rowStyle}>
-                <ChartObject id='chart_hours' name='Machine Usage Hours' unit="hours" value={hoursData}/> 
-                <ChartObject id='chart_cost' name='Machine Usage Cost' unit="cost" value={costData}/> 
-            </div>
-            <div className='mf-flex-row' style={rowStyle}>
-                <ListObject id='uages' name='Machine Usage History' value={machineUsages}/>
-            </div>
-            <div className='mf-flex-row' style={rowStyle}>
-                <LinkObject id='discord' name='Join Our Discord!' value='https://discord.gg/vnPvMPadNy'/>
-            </div>
+
+            <section className='dash-section dash-section--info'>
+                <PageRuler src={rulerMask} color='var(--color-navy)' width={79} zIndex={2} />
+                <div className='dash-inner'>
+                    <header className='dash-header'>
+                        <div>
+                            <h1 className='dash-title'>My Dashboard</h1>
+                            <p className='dash-welcome'>Welcome back{user.first_name ? `, ${user.first_name}` : ''}!</p>
+                        </div>
+                        {canUseMachines && (
+                            <Link className='dash-use-btn' to='/myforge/create'>+ Use a Machine</Link>
+                        )}
+                    </header>
+
+                    <div className='dash-cards'>
+                        <div className='dash-card dash-card--cost'>
+                            <p className='dash-eyebrow'>SEMESTER COST</p>
+                            <p className='dash-amount'>{money(user.semester_balance)}</p>
+                            <p className='dash-caption'>Total spent this semester</p>
+                        </div>
+
+                        <div className='dash-card dash-card--session'>
+                            <div className='dash-session-top'>
+                                <p className='dash-eyebrow'>CURRENT SESSION</p>
+                                {currentUsage && <span className='dash-live'>Live</span>}
+                                {currentUsageCount > 1 && <span className='dash-more'>+{currentUsageCount - 1} more</span>}
+                            </div>
+                            {currentUsage && sessionStart ? (
+                                <>
+                                    <div className='dash-session-machine'>
+                                        <div className='dash-session-name'>
+                                            <span className='dash-dot' aria-hidden='true' />
+                                            <div>
+                                                <p className='dash-machine'>{currentUsage.machine_name}</p>
+                                                {sessionEnd && <p className='dash-muted'>Ends at {clockTime(sessionEnd)}</p>}
+                                            </div>
+                                        </div>
+                                        <p className='dash-muted dash-started'>Started at {clockTime(sessionStart)}</p>
+                                    </div>
+                                    <div className='dash-session-stats'>
+                                        <div>
+                                            <p className='dash-muted'>Elapsed Time</p>
+                                            <p className='dash-stat'>{elapsed((now - sessionStart.getTime()) / 1000)}</p>
+                                        </div>
+                                        <div>
+                                            <p className='dash-muted'>Session Cost</p>
+                                            <p className='dash-stat'>{money(currentUsage.cost)}</p>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <p className='dash-empty'>You’re not using a machine right now.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section className='dash-section dash-section--machines'>
+                <PageRuler src={rulerMask} color='var(--color-red)' width={79} zIndex={2} />
+                <div className='dash-inner'>
+                    <div className='dash-row-head'>
+                        <h2 className='dash-subtitle'>Your Spending by Machine</h2>
+                        <p className='dash-period'>This Semester</p>
+                    </div>
+                    <div className='dash-panel dash-spending'>
+                        {spending.length === 0 ? (
+                            <p className='dash-empty'>No machine usage in {currentSemester} yet.</p>
+                        ) : spending.map((row) => (
+                            <div className='dash-bar-row' key={row.machine}>
+                                <span className='dash-bar-label'>{row.machine}</span>
+                                <span className='dash-bar-track'>
+                                    <span className='dash-bar-fill' style={{ width: `${Math.max(row.share * 100, 2)}%` }} />
+                                </span>
+                                <span className='dash-bar-value'>{money(row.cost)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            <section className='dash-section dash-section--activity'>
+                <PageRuler src={rulerMask} color='var(--color-navy-mid)' width={79} zIndex={2} />
+                <div className='dash-inner'>
+                    <div className='dash-panel dash-activity'>
+                        <div className='dash-activity-head'>
+                            <h2 className='dash-activity-title'>Recent Activity</h2>
+                            <label className='dash-filter'>
+                                <span>Filter:</span>
+                                <select
+                                    value={activeFilter}
+                                    onChange={(e) => { setSemesterFilter(e.target.value); setPage(1); }}
+                                >
+                                    {semesters.map((label) => (
+                                        <option key={label} value={label}>{label}</option>
+                                    ))}
+                                    <option value='all'>All semesters</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div className='dash-table-wrap'>
+                            <table className='dash-table'>
+                                <thead>
+                                    <tr>
+                                        <th>SEMESTER</th>
+                                        <th>DATE</th>
+                                        <th>MACHINE</th>
+                                        <th>COST</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {pageRows.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={4} className='dash-table-empty'>No machine logs for this semester.</td>
+                                        </tr>
+                                    ) : pageRows.map((usage) => (
+                                        <tr key={`${usage.time_started}-${usage.machine_name}`}>
+                                            <td>{semesterLabel(usage.semester)}</td>
+                                            <td>{shortDate(usage.time_started)}</td>
+                                            <td className='dash-table-machine'>{usage.machine_name}</td>
+                                            <td>{money(usage.cost)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className='dash-activity-foot'>
+                            <p>Displaying {pageRows.length} of {filteredUsages.length} machine logs</p>
+                            <div className='dash-pager'>
+                                <button type='button' aria-label='Previous page' disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>&lt;</button>
+                                <button type='button' aria-label='Next page' disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)}>&gt;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
     );
 };
 
 export default Summary;
-
-interface ListObjectProps {
-    id: string;
-    name: string;
-    value: MachineUsage[];
-}
-
-const ListObject = ({ id, name, value }: ListObjectProps) => {
-
-    const listStyle = {
-        flex: '1',
-    } as React.CSSProperties;
-
-    return (
-        <div className='mf-list mf-component' style={listStyle}>
-            <ul>
-                {value.map((usage) => (
-                    <li key={usage.time_started.toString()}>
-                        <strong>{usage.machine_name}</strong> - {usage.time_started.toString()} - ${Number(usage.cost).toFixed(2)}
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
-}
-
-interface DisplayObjectProps {
-    id: string;
-    name: string;
-    semester_cost: string;
-}
-
-const DisplayObject = ({ id, name, semester_cost }: DisplayObjectProps) => {
-
-    const displayStyle = {
-        flex: '1',
-        padding: '10px',
-        minWidth: '150px',
-    } as React.CSSProperties;
-
-    return (
-        <div className='mf-display mf-component' style={displayStyle}>
-            <h4>{name}</h4>
-            <h3>${semester_cost}</h3>
-        </div>
-    );
-}
-
-interface LinkObjectProps {
-    id: string;
-    name: string;
-    value: any;
-}
-
-const LinkObject = ({ id, name, value }: LinkObjectProps) => {
-
-    const linkStyle = {
-        flex: '1',
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        color: '#5865F2',
-        textDecoration: 'none',
-    } as React.CSSProperties;
-
-    const iconStyle = {
-        marginRight: '10px',
-        width: '24px',
-        height: '24px',
-    } as React.CSSProperties;
-
-    return (
-        <div className='mf-link mf-component' style={linkStyle}>
-            <DiscordIcon className='cs-logo' style={iconStyle} />
-            <a href={value} style={{ color: '#5865F2', textDecoration: 'none', fontSize: '24px' }}>{name}</a>
-        </div>
-    );
-}
-
-interface ChartObjectProps {
-    id: string;
-    name: string;
-    unit: string;
-    value: any;
-}
-
-const ChartObject = ({ id, name, unit, value }: ChartObjectProps) => {
-
-    const chartStyle = {
-       flex: '1',
-       padding: '10px',
-    } as React.CSSProperties;
-
-    const colors = [
-        '#9d9d9d','#e30000', '#5e5e5e', '#d6d6d6',  '#9b0808', 
-        '#671403', '#f11717', '#fbb0b0', '#aab6cc', '#18155b'
-    ];
-
-    return (
-        <div className='mf-chart mf-component' style={chartStyle}>
-            <h1>{name}</h1>
-            <div className='mf-chart-container'>
-                <ul className='mf-chart-legend'>
-                    {value.map((item: any, index: number) => {
-                        return (
-                            <li key={index} className='mf-chart-legend-item'>
-                                <div className='mf-chart-legend-color' style={{ backgroundColor: colors[index] }}></div>
-                                <h2>{item.machine}</h2>
-                            </li>
-                        );
-                    })}
-                </ul>
-                <PieChart
-                    className='mf-pie-chart'
-                    data={value.map((item: any, index: number) => {
-                        return { title: item.machine, value: item.usage, color: colors[index], }
-                    })}
-                    label={({ dataEntry }) => 
-                        (unit == 'cost') ? `$${Math.round(dataEntry.value)}` : `${Math.round(dataEntry.value)} hrs`
-                    }
-                    labelStyle={{
-                        fontSize: '50%',
-                        fontFamily: 'sans-serif',
-                        fill: 'black',
-                    }}
-                    labelPosition={65}
-                />
-            </div>
-        </div>
-    );
-}
-
-interface SingleObjectProps {
-    id: string;
-    name: string;
-    value: MachineUsage | null
-    count: number
-}
-
-const SingleObject = ({ id, name, value, count }: SingleObjectProps) => {
-
-    const singleStyle = {
-        flex: '2',
-        padding: '10px',
-        minWidth: '350px',
-        minHeight: '80px'
-    } as React.CSSProperties;
-
-    const infoStyle = {
-        display: 'flex',
-        justifyContent: 'space-between',
-    } as React.CSSProperties;
-
-    return (
-        <div className='mf-single mf-component' style={singleStyle}>
-            <h4 style={{ textAlign: 'left' }}>
-                {name} {count > 1 ? `(${count})` : ""}
-            </h4>
-            {value ? (
-                <>
-                    <h3>{value.machine_name}</h3>
-                    <div style={infoStyle}>
-                        <h4>{new Date(value.time_started).toLocaleDateString()}</h4>
-                        <h4>{Math.ceil(Number(value.duration)/60)} minutes</h4>
-                    </div>
-                </>
-            ) : (
-                <h2>No current usages</h2>
-            )}
-        </div>
-    );
-}

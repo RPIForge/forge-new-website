@@ -1,7 +1,9 @@
 import React, { ReactNode, useEffect, useState } from 'react';
 
 import '../styles/Table.scss';
-import { Pencil2Icon, TrashIcon, ArrowLeftIcon, ArrowRightIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, ArrowRightIcon } from '@radix-ui/react-icons';
+import editIcon from '../../../assets/img/icon-edit.svg?url';
+import deleteIcon from '../../../assets/img/icon-delete.svg?url';
 import { OmniAPI } from 'src/apis/OmniAPI';
 
 interface TableProps<T> {
@@ -153,16 +155,24 @@ function Table<T>(props: TableProps<T>) {
                                 {hasEditOrDelete && (
                                     <td className="icon">
                                         {canEdit && (
-                                            <Pencil2Icon
+                                            <button
+                                                type="button"
                                                 className="edit"
+                                                aria-label="Edit"
                                                 onClick={() => onEdit?.(row)}
-                                            />
+                                            >
+                                                <img src={editIcon} alt="" />
+                                            </button>
                                         )}
                                         {hasDelete && (
-                                            <TrashIcon
+                                            <button
+                                                type="button"
                                                 className="trash"
+                                                aria-label="Delete"
                                                 onClick={() => onDelete(rowIndex, rowIndex)}
-                                            />
+                                            >
+                                                <img src={deleteIcon} alt="" />
+                                            </button>
                                         )}
                                     </td>
                                 )}

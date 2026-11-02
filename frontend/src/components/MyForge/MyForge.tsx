@@ -46,6 +46,14 @@ const MyForge: React.FC = () => {
         if (isMobile()) setMenuOpen(false);
     }, [location.pathname]);
 
+    if (/^\/myforge\/?(summary\/?)?$/.test(location.pathname)) {
+        return (
+            <Suspense fallback={<div></div>}>
+                <Summary />
+            </Suspense>
+        );
+    }
+
     return (
         <div className={`myforge ${menuOpen ? 'menu-open' : 'menu-closed'}`}>
             <UserMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} />
