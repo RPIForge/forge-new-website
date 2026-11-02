@@ -20,7 +20,7 @@ from ..deps import DBSession, PermittedUserChecker
 router = APIRouter()
 
 
-async def send_failure_email(email, machine_name, percentage):
+async def send_failure_email(email, machine_name, percentage, error_message, noticeable_fault):
     client = EmailClient.from_connection_string(
         settings.AZURE_COMMUNICATION_CONNECTION_STRING
     )
@@ -34,7 +34,10 @@ async def send_failure_email(email, machine_name, percentage):
         "content": {
             "subject": "Your Machine Usage Failed",
             "plainText": (
-                f"Unfortunately, your machine usage on {machine_name} has failed at {percentage}%. You may want to stop by the Forge soon. If you used Forge filament, one reprint is free."
+                f"Unfortunately, your machine usage on {machine_name} has failed at {percentage}%.\n\n"
+                f"Reason given: {error_message or 'No reason given'}\n"
+                f"Noticeable faults: {noticeable_fault or 'None reported'}\n\n"
+                "You may want to stop by the Forge soon. If you used Forge filament, one reprint is free."
             ),
         },
     }
@@ -148,6 +151,8 @@ async def fail_machine(
             f"{machine.active_usage.user.RCSID}@rpi.edu",
             machine.name,
             str(request.percentage),
+            request.error_message,
+            request.noticeable_fault,
         )
     except Exception:
         logging.exception("Failed to send machine failure email")

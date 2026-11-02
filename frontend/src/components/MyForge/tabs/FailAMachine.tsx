@@ -29,20 +29,38 @@ export const FailAMachineForm: React.FC = () => {
         fetchMachines();
     }, []);
 
-    const [inProgressIds, setInProgressIds] = useState<Set<string>>(new Set());
+    const [inProgress, setInProgress] = useState<Record<string, { usage_start?: string; usage_duration?: number }>>({});
 
     const loadInProgress = () => {
         OmniAPI.getPublic("machinestatus").then((res: any) => {
             const all = [...(res?.loners ?? []), ...(res?.groups ?? []).flatMap((g: any) => g.machines ?? [])];
-            setInProgressIds(new Set(all.filter((m: any) => m.in_use).map((m: any) => m.id)));
-        }).catch(() => setInProgressIds(new Set()));
+            setInProgress(Object.fromEntries(all.filter((m: any) => m.in_use).map((m: any) => [m.id, m])));
+        }).catch(() => setInProgress({}));
     };
 
     useEffect(() => {
         loadInProgress();
     }, []);
 
-    const failableMachines = machines.filter((machine) => inProgressIds.has(machine.id));
+    const failableMachines = machines.filter((machine) => machine.id in inProgress);
+
+    const PERCENT_MARGIN = 25;
+
+    const confirmLooksRight = (): boolean => {
+        const usage = inProgress[selectedMachineId];
+        if (!usage?.usage_start || !usage?.usage_duration) return true;
+
+        const elapsedSeconds = (Date.now() - new Date(usage.usage_start).getTime()) / 1000;
+        const expectedPercent = Math.round((elapsedSeconds / usage.usage_duration) * 100);
+
+        if (expectedPercent >= 100) {
+            return confirm("This print should have already finished. Did it actually fail?");
+        }
+        if (Math.abs(expectedPercent - estimatedPercentCompleted) > PERCENT_MARGIN) {
+            return confirm(`Based on when it started, this print should be about ${Math.max(expectedPercent, 0)}% done, but you entered ${estimatedPercentCompleted}%. Is this the right machine?`);
+        }
+        return true;
+    };
 
     /**
      * Handle Machine Selection with placeholder protection
@@ -70,6 +88,7 @@ export const FailAMachineForm: React.FC = () => {
      */
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
+        if (!confirmLooksRight()) return;
         setIsSubmitting(true);
         const data: Record<string, any> = {
             machine_id: selectedMachineId,
