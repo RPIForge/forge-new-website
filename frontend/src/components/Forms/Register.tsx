@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { CheckboxInput, DropdownInput, Form, TextInput } from './Form';
+import Majors from './data/sorted_majors.json';
+import AuthLayout, {
+    AuthCheck,
+    AuthChecks,
+    AuthDivider,
+    AuthField,
+    AuthFields,
+    AuthPrimaryButton,
+    AuthRequired,
+    AuthTitle,
+} from './AuthLayout';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../Auth/useAuth';
 import { OmniAPI } from '../../apis/OmniAPI';
 import axios from 'axios';
 // import { ReactComponent as Logo } from 'logo.svg';
 
-import './styles/Form.scss';
-import './styles/Register.scss';
 
 const formFields = [
     {
@@ -66,6 +74,13 @@ export default function Register() {
 
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [formValues, setFormValues] = useState<{ [key: string]: string }>({});
+
+    const setValue = (id: string, value: string) => {
+        setFormValues((prev) => ({ ...prev, [id]: value }));
+    };
+
+    const fields = formFields as { id: string; label: string; type: string; placeholder?: string; required?: boolean }[];
 
     const handleRegister = async (e: React.FormEvent<HTMLFormElement>, formValues: { [key: string]: string }) => {
         e.preventDefault();
@@ -150,14 +165,55 @@ export default function Register() {
     }
 
     return (
-        <div className='page-container register-page'>
-            <Form
-                formFields={formFields}
-                handleSubmit={handleRegister} 
-                submitLabel="Register" 
-                title="Register"
-                isSubmitting={isSubmitting}
-            />
-        </div>
+        <AuthLayout>
+            <form onSubmit={(e) => handleRegister(e, formValues)}>
+                <AuthTitle>Registration Form</AuthTitle>
+                <AuthDivider />
+                <AuthFields>
+                    {fields.filter((field) => field.type !== "checkbox").map((field) => (
+                        <AuthField key={field.id}>
+                            <label htmlFor={`register-${field.id}`}>{field.label}<AuthRequired /></label>
+                            {field.type === "dropdown" ? (
+                                <select
+                                    id={`register-${field.id}`}
+                                    value={formValues[field.id] ?? ""}
+                                    onChange={(e) => setValue(field.id, e.target.value)}
+                                    required
+                                >
+                                    <option value="" disabled>{field.placeholder}</option>
+                                    {Majors.Majors.map((major: string) => (
+                                        <option key={major} value={major}>{major}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input
+                                    id={`register-${field.id}`}
+                                    type={field.type}
+                                    value={formValues[field.id] ?? ""}
+                                    onChange={(e) => setValue(field.id, e.target.value)}
+                                    required
+                                />
+                            )}
+                        </AuthField>
+                    ))}
+                </AuthFields>
+                <AuthChecks>
+                    {fields.filter((field) => field.type === "checkbox").map((field) => (
+                        <AuthCheck key={field.id}>
+                            <input
+                                id={`register-${field.id}`}
+                                type="checkbox"
+                                required={field.required}
+                                onChange={(e) => setValue(field.id, e.target.checked ? "checked" : "")}
+                            />
+                            <label htmlFor={`register-${field.id}`}>{field.label}{field.required && <AuthRequired />}</label>
+                        </AuthCheck>
+                    ))}
+                </AuthChecks>
+                <AuthPrimaryButton type="submit" $wide disabled={isSubmitting}>
+                    {isSubmitting ? "Creating Account..." : "Start Making!"}
+                </AuthPrimaryButton>
+            </form>
+        </AuthLayout>
     )
 }
