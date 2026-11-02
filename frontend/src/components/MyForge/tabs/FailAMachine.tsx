@@ -29,6 +29,39 @@ export const FailAMachineForm: React.FC = () => {
         fetchMachines();
     }, []);
 
+    const [inProgress, setInProgress] = useState<Record<string, { usage_start?: string; usage_duration?: number }>>({});
+
+    const loadInProgress = () => {
+        OmniAPI.getPublic("machinestatus").then((res: any) => {
+            const all = [...(res?.loners ?? []), ...(res?.groups ?? []).flatMap((g: any) => g.machines ?? [])];
+            setInProgress(Object.fromEntries(all.filter((m: any) => m.in_use).map((m: any) => [m.id, m])));
+        }).catch(() => setInProgress({}));
+    };
+
+    useEffect(() => {
+        loadInProgress();
+    }, []);
+
+    const failableMachines = machines.filter((machine) => machine.id in inProgress);
+
+    const PERCENT_MARGIN = 25;
+
+    const confirmLooksRight = (): boolean => {
+        const usage = inProgress[selectedMachineId];
+        if (!usage?.usage_start || !usage?.usage_duration) return true;
+
+        const elapsedSeconds = (Date.now() - new Date(usage.usage_start).getTime()) / 1000;
+        const expectedPercent = Math.round((elapsedSeconds / usage.usage_duration) * 100);
+
+        if (expectedPercent >= 100) {
+            return confirm("This print should have already finished. Did it actually fail?");
+        }
+        if (Math.abs(expectedPercent - estimatedPercentCompleted) > PERCENT_MARGIN) {
+            return confirm(`Based on when it started, this print should be about ${Math.max(expectedPercent, 0)}% done, but you entered ${estimatedPercentCompleted}%. Is this the right machine?`);
+        }
+        return true;
+    };
+
     /**
      * Handle Machine Selection with placeholder protection
      */
@@ -55,6 +88,7 @@ export const FailAMachineForm: React.FC = () => {
      */
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
+        if (!confirmLooksRight()) return;
         setIsSubmitting(true);
         const data: Record<string, any> = {
             machine_id: selectedMachineId,
@@ -67,13 +101,16 @@ export const FailAMachineForm: React.FC = () => {
             if (response != null) {
                 console.log("Response:", response);
                 alert("An error occurred, please try again.");
+                return;
             }
             alert("Success, machine failure email sent");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error:", error);
-            alert("An error occurred, please try again.");
+            alert(error?.response?.data?.detail ?? "An error occurred, please try again.");
+            if (error?.response?.status !== 502) return;
         } finally {
             setIsSubmitting(false);
+            loadInProgress();
         }
         
         // Clear form
@@ -86,6 +123,7 @@ export const FailAMachineForm: React.FC = () => {
      * Reset Form Fields
      */
     const resetFormFields = () => {
+        setSelectedMachineId("_");
         setEstimatedPercentCompleted(0);
         setPrinterErrorMessage("");
         setNoticeableFaults([]);
@@ -104,8 +142,8 @@ export const FailAMachineForm: React.FC = () => {
                     onChange={(e) => handleSelectMachine(e.target.value)}
                     required
                 >
-                    <option className='styled-dropdown-placeholder' value="_" hidden>{"Please Select a Machine"}</option>
-                    {machines.map((machine: Machine) => (
+                    <option className='styled-dropdown-placeholder' value="_" hidden>{failableMachines.length ? "Please Select a Machine" : "No machines are in use"}</option>
+                    {failableMachines.map((machine: Machine) => (
                         <option className='styled-dropdown-option' key={machine.id} value={machine.id}>{machine.name}</option>
                     ))}
                 </select>
