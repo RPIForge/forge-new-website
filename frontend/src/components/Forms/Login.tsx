@@ -105,7 +105,7 @@ export default function Login() {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
-                            maxLength={8}
+                            maxLength={10}
                             autoComplete="username"
                         />
                     </AuthField>
