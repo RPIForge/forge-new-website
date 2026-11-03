@@ -17,7 +17,7 @@ from models.auth_token import AuthToken
 from models.role import Role
 from models.user import User
 from schemas.enums import LogType, Permissions, TokenType
-from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest, UserEditRequest
+from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest, UserEditRequest, UserSelfEditRequest
 from schemas.responses import BasicUserResponse, UserNoHash
 
 from core.security import get_password_hash
@@ -494,6 +494,39 @@ async def change_user_role(
 # GET ALL USERS
 
 # EDIT USER PREFERENCES
+@router.post("/users/edit")
+async def edit_self(
+    request: UserSelfEditRequest,
+    session: DBSession,
+    current_user: Annotated[
+        User, Depends(PermittedUserChecker({Permissions.CAN_EDIT_SELF}))
+    ]
+) -> None:
+    user = await session.scalar(
+        select(User).where(User.id == current_user.id)
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with provided ID not found",
+        )
+
+    if request.first_name is not None:
+        user.first_name = request.first_name
+    if request.last_name is not None:
+        user.last_name = request.last_name
+    if request.major is not None:
+        user.major = request.major
+    if request.gender_identity is not None:
+        user.gender_identity = request.gender_identity
+    if request.pronouns is not None:
+        user.pronouns = request.pronouns
+
+    await session.commit()
+
+
+# EDIT USER SECURE DETAILS
 @router.post("/users/edit/{user_id}")
 async def edit_user(
     user_id: UUID,
@@ -565,6 +598,5 @@ async def edit_user(
 
     await session.commit()
 
-# EDIT USER SECURE DETAILS
 
 # HARD DELETE USER
