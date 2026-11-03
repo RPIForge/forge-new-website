@@ -1,7 +1,6 @@
-import React, { lazy, Suspense, useEffect, useState } from 'react';
-import UserMenu from './components/UserMenu';
-import { Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import { HamburgerMenuIcon } from '@radix-ui/react-icons';
+import React, { lazy, Suspense } from 'react';
+import { Route, Routes } from 'react-router-dom';
+import bgPattern from 'src/assets/img/background.svg?url';
 
 import './styles/MyForge.scss';
 import './styles/TabStyles.scss';
@@ -9,68 +8,28 @@ import { DynamicMachineForm } from './tabs/UseAMachine';
 import { FailAMachineForm } from './tabs/FailAMachine';
 
 const Summary = lazy(() => import('./tabs/Summary'));
-const Machines = lazy(() => import('./tabs/Machines'));
-const MachineTypes = lazy(() => import('./tabs/MachineTypes'));
-const MachineGroups = lazy(() => import('./tabs/MachineGroups'));
-const Resources = lazy(() => import('./tabs/Resources'));
-const ResourceSlots = lazy(() => import('./tabs/ResourceSlots'));
-const Users = lazy(() => import('./tabs/Users'));
 const Usages = lazy(() => import('./tabs/Usages'));
-const ComingSoon = lazy(() => import( '../Home/ComingSoon'));
-const Semesters = lazy(() => import('./tabs/Semesters'));
-const ChargeSheets = lazy(() => import('./tabs/ChargeSheets'));
-const Roles = lazy(() => import('./tabs/Roles'));
-const UserRoles = lazy(() => import('./tabs/UserRoles'));
-
-
-interface MyForgeProps {
-
-}
-
-// Below this width the sidebar becomes a slide-out drawer (keep in sync with $mobile-breakpoint in MyForge.scss)
-const MOBILE_QUERY = '(max-width: 900px)';
-const isMobile = () => typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches;
 
 const MyForge: React.FC = () => {
     /** MyForge Component
-     *  - Operates as a functional Router for the subpage types. Which are defined in the App.tsx file.
-     *  - All children share the same prop API, defined above, which is passed through context.
+     *  - Routes the logged-in user through their dashboard + related forms.
+     *  - The Summary dashboard now matches the Member/Volunteer Figma frames:
+     *    the action buttons (Failure Form, + Use a Machine, Admin) are rendered
+     *    inline at the top of the dashboard, so the old sidebar has been
+     *    removed. Volunteer = has CAN_FAIL_MACHINES. Admin/superuser also gets
+     *    the Admin button.
+     *  - A hex-pattern background (the same asset used on the Admin / Status /
+     *    Hours pages) is painted behind the content to match the Figma.
     */
 
-    // Sidebar starts open on desktop and closed on phones
-    const [menuOpen, setMenuOpen] = useState<boolean>(() => !isMobile());
-    const location = useLocation();
-
-    // On phones, close the drawer after picking a page
-    useEffect(() => {
-        if (isMobile()) setMenuOpen(false);
-    }, [location.pathname]);
-
-    if (/^\/myforge\/?(summary\/?)?$/.test(location.pathname)) {
-        return (
-            <Suspense fallback={<div></div>}>
-                <Summary />
-            </Suspense>
-        );
-    }
-
     return (
-        <div className={`myforge ${menuOpen ? 'menu-open' : 'menu-closed'}`}>
-            <UserMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} />
-            {menuOpen && <div className='sidebar-backdrop' onClick={() => setMenuOpen(false)} aria-hidden='true' />}
-            {!menuOpen && (
-                <button
-                    type='button'
-                    className='sidebar-toggle'
-                    onClick={() => setMenuOpen(true)}
-                    aria-label='Open menu'
-                    aria-expanded={false}
-                >
-                    <HamburgerMenuIcon />
-                    <span>Menu</span>
-                </button>
-            )}
-            <div className='tab-container'>
+        <div className="myforge">
+            <div
+                className="myforge-bg-pattern"
+                style={{ backgroundImage: `url(${bgPattern})` }}
+                aria-hidden="true"
+            />
+            <div className="myforge-content">
                 <Suspense fallback={<div></div>}>
                     <Routes>
                         <Route index element={<Summary />} />
@@ -78,17 +37,6 @@ const MyForge: React.FC = () => {
                         <Route path="create" element={<DynamicMachineForm />} />
                         <Route path="fail" element={<FailAMachineForm />} />
                         <Route path="usages" element={<Usages />} />
-                        <Route path="machines" element={<Machines />} />
-                        <Route path="machine_types" element={<MachineTypes />} />
-                        <Route path="machine_groups" element={<MachineGroups />} />
-                        <Route path="machines" element={<Machines />} />
-                        <Route path="resources" element={<Resources />} />
-                        <Route path="resource_slots" element={<ResourceSlots />} />
-                        <Route path="users" element={<Users />} />
-                        <Route path="roles" element={<Roles />} />
-                        <Route path="user_roles" element={<UserRoles />} />
-                        <Route path="semesters" element={<Semesters />} />
-                        <Route path="charge_sheets" element={<ChargeSheets />} />
                     </Routes>
                 </Suspense>
             </div>

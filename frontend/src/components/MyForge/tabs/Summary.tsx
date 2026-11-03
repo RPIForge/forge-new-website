@@ -33,6 +33,12 @@ const semesterFromDate = (date: Date): string => {
     return `${name} ${date.getFullYear()}`;
 };
 
+const parseServerTime = (value: string | null | undefined): Date | null => {
+    if (!value) return null;
+    const hasZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(value);
+    return new Date(hasZone ? value : `${value}Z`);
+};
+
 const shortDate = (value: string | Date) =>
     new Date(value).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
 
@@ -158,11 +164,29 @@ const Summary: React.FC = () => {
         refreshUser();
     }, []);
 
+    const sessionStart = currentUsage ? new Date(currentUsage.time_started) : null;
+    const sessionEnd = sessionStart && currentUsage
+        ? new Date(sessionStart.getTime() + Number(currentUsage.duration) * 1000)
+        : null;
+    const failedAt = currentUsage?.failed ? parseServerTime(currentUsage.failed_at) : null;
+    const sessionState: 'live' | 'finished' | 'failed' | null = !currentUsage
+        ? null
+        : currentUsage.failed
+            ? 'failed'
+            : sessionEnd && now >= sessionEnd.getTime()
+                ? 'finished'
+                : 'live';
+    const elapsedUntil = sessionState === 'failed'
+        ? (failedAt?.getTime() ?? now)
+        : sessionState === 'finished' && sessionEnd
+            ? sessionEnd.getTime()
+            : now;
+
     useEffect(() => {
-        if (!currentUsage) return;
+        if (sessionState !== 'live') return;
         const timer = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(timer);
-    }, [currentUsage]);
+    }, [sessionState]);
 
     const semesters = React.useMemo(() => {
         const labels = new Set<string>();
@@ -195,11 +219,7 @@ const Summary: React.FC = () => {
     }, [machineUsages, currentSemester]);
 
     const canUseMachines = hasPermission(UserPermission.CAN_USE_MACHINES) || hasPermission(UserPermission.CAN_USE_MACHINES_BETWEEN_SEMESTERS);
-
-    const sessionStart = currentUsage ? new Date(currentUsage.time_started) : null;
-    const sessionEnd = sessionStart && currentUsage
-        ? new Date(sessionStart.getTime() + Number(currentUsage.duration) * 1000)
-        : null;
+    const canFailMachines = hasPermission(UserPermission.CAN_FAIL_MACHINES);
 
     return (
         <div className='dash'>
@@ -249,8 +269,15 @@ const Summary: React.FC = () => {
                             <h1 className='dash-title'>My Dashboard</h1>
                             <p className='dash-welcome'>Welcome back{user.first_name ? `, ${user.first_name}` : ''}!</p>
                         </div>
-                        {canUseMachines && (
-                            <Link className='dash-use-btn' to='/myforge/create'>+ Use a Machine</Link>
+                        {(canFailMachines || canUseMachines) && (
+                            <div className='dash-actions'>
+                                {canFailMachines && (
+                                    <Link className='dash-use-btn dash-use-btn--outline' to='/myforge/fail'>Failure Form</Link>
+                                )}
+                                {canUseMachines && (
+                                    <Link className='dash-use-btn' to='/myforge/create'>+ Use a Machine</Link>
+                                )}
+                            </div>
                         )}
                     </header>
 
@@ -264,7 +291,9 @@ const Summary: React.FC = () => {
                         <div className='dash-card dash-card--session'>
                             <div className='dash-session-top'>
                                 <p className='dash-eyebrow'>CURRENT SESSION</p>
-                                {currentUsage && <span className='dash-live'>Live</span>}
+                                {sessionState === 'live' && <span className='dash-live'>Live</span>}
+                                {sessionState === 'finished' && <span className='dash-live dash-live--done'>Finished</span>}
+                                {sessionState === 'failed' && <span className='dash-live dash-live--failed'>Failed</span>}
                                 {currentUsageCount > 1 && <span className='dash-more'>+{currentUsageCount - 1} more</span>}
                             </div>
                             {currentUsage && sessionStart ? (
@@ -274,7 +303,11 @@ const Summary: React.FC = () => {
                                             <span className='dash-dot' aria-hidden='true' />
                                             <div>
                                                 <p className='dash-machine'>{currentUsage.machine_name}</p>
-                                                {sessionEnd && <p className='dash-muted'>Ends at {clockTime(sessionEnd)}</p>}
+                                                {sessionState === 'failed' ? (
+                                                    <p className='dash-muted dash-muted--failed'>Failed{failedAt ? ` at ${clockTime(failedAt)}` : ''}</p>
+                                                ) : sessionEnd && (
+                                                    <p className='dash-muted'>{sessionState === 'finished' ? 'Finished at' : 'Ends at'} {clockTime(sessionEnd)}</p>
+                                                )}
                                             </div>
                                         </div>
                                         <p className='dash-muted dash-started'>Started at {clockTime(sessionStart)}</p>
@@ -282,13 +315,19 @@ const Summary: React.FC = () => {
                                     <div className='dash-session-stats'>
                                         <div>
                                             <p className='dash-muted'>Elapsed Time</p>
-                                            <p className='dash-stat'>{elapsed((now - sessionStart.getTime()) / 1000)}</p>
+                                            <p className='dash-stat'>{elapsed((elapsedUntil - sessionStart.getTime()) / 1000)}</p>
                                         </div>
                                         <div>
                                             <p className='dash-muted'>Session Cost</p>
                                             <p className='dash-stat'>{money(currentUsage.cost)}</p>
                                         </div>
                                     </div>
+                                    {sessionState === 'failed' && (
+                                        <p className='dash-session-note'>Your print failed. Stop by the Forge to pick it up — if you used Forge filament, one reprint is free.</p>
+                                    )}
+                                    {sessionState === 'finished' && (
+                                        <p className='dash-session-note'>Your print should be done. Pick it up so a volunteer can clear the machine.</p>
+                                    )}
                                 </>
                             ) : (
                                 <p className='dash-empty'>You’re not using a machine right now.</p>
@@ -359,7 +398,10 @@ const Summary: React.FC = () => {
                                         <tr key={`${usage.time_started}-${usage.machine_name}`}>
                                             <td>{semesterLabel(usage.semester)}</td>
                                             <td>{shortDate(usage.time_started)}</td>
-                                            <td className='dash-table-machine'>{usage.machine_name}</td>
+                                            <td className='dash-table-machine'>
+                                                {usage.machine_name}
+                                                {usage.failed && <span className='dash-tag-failed'>Failed</span>}
+                                            </td>
                                             <td>{money(usage.cost)}</td>
                                         </tr>
                                     ))}

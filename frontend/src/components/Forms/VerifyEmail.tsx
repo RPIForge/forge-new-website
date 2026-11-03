@@ -2,9 +2,63 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useAuth from '../Auth/useAuth';
 import { AuthAPI } from 'src/apis/AuthAPI';
-import './styles/VerifyEmail.scss';
+import styled from 'styled-components';
+import PageRuler from '../shared/PageRuler';
+import {
+    ANVIL_URL,
+    AnvilImage,
+    ButtonRow,
+    CardInner,
+    Divider,
+    FieldInput,
+    FieldLabel,
+    FieldRow,
+    FieldsContainer,
+    FormCard,
+    PageBackground,
+    RULER_URL,
+    StartMakingBtn,
+    Title,
+} from './Login';
 
-const logoSvg = new URL('../../assets/img/logo.svg', import.meta.url).href;
+const Description = styled.p`
+    font-family: var(--font-display, 'Funnel Display', sans-serif);
+    font-size: 15px;
+    color: #000;
+    text-align: center;
+    margin: 16px 20px 0;
+`;
+
+const Message = styled.p<{ $type: 'error' | 'success' }>`
+    font-family: var(--font-display, 'Funnel Display', sans-serif);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    margin: 12px 20px 0;
+    color: ${p => (p.$type === 'error' ? '#a51c1c' : '#1d7a48')};
+`;
+
+const WideBtn = styled(StartMakingBtn)`
+    width: auto;
+    min-width: clamp(130px, 13vw, 181px);
+    padding: 0 16px;
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+`;
+
+const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <PageBackground>
+        <AnvilImage src={ANVIL_URL} alt="" />
+        <PageRuler src={RULER_URL} side="left" zIndex={1} />
+        <FormCard>
+            <CardInner>{children}</CardInner>
+        </FormCard>
+    </PageBackground>
+);
 
 export default function VerifyEmail() {
     const { token } = useParams<{ token: string }>();
@@ -92,27 +146,33 @@ export default function VerifyEmail() {
     }
 
     if (isLoading) {
-        return <div className='verify-email-container'>Checking verification link...</div>;
+        return (
+            <Shell>
+                <Title>Verify Your Email</Title>
+                <Divider />
+                <Description>Checking verification link...</Description>
+                <div style={{ height: 20 }} />
+            </Shell>
+        );
     }
 
     return (
-        <div className='verify-email-container'>
-            <form onSubmit={handleVerifyEmail}>
-                <img src={logoSvg} alt='Forge logo' className='form-logo' />
-                <label>Verify Your Email</label>
-                <p className='description'>
-                    Click the button below to verify your email address
-                </p>
-                {error && <div className='error-message'>{error}</div>}
-                {success && <div className='success-message'>Email verified successfully</div>}
+        <Shell>
+            <form onSubmit={handleVerifyEmail} style={{ width: '100%', display: 'contents' }}>
+                <Title>Verify Your Email</Title>
+                <Divider />
+                <Description>Click the button below to verify your email address</Description>
+                {error && <Message $type="error">{error}</Message>}
+                {success && <Message $type="success">Email verified successfully</Message>}
                 {isTokenValid && (
-                    <div className='button-container'>
-                        <button type='submit' disabled={success}>
+                    <ButtonRow style={{ marginTop: 12 }}>
+                        <WideBtn type="submit" disabled={success}>
                             {success ? 'Verified!' : 'Verify Email'}
-                        </button>
-                    </div>
+                        </WideBtn>
+                    </ButtonRow>
                 )}
+                {!isTokenValid && <div style={{ height: 20 }} />}
             </form>
-        </div>
+        </Shell>
     );
 }

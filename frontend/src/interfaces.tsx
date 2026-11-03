@@ -111,6 +111,8 @@ export interface MachineUsage {
     duration: number
     machine_name: string
     cost: number
+    failed?: boolean
+    failed_at?: string | null
 };
 
 export interface Resource {

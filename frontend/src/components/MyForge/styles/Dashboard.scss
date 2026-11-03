@@ -569,3 +569,50 @@
         }
     }
 }
+
+.dash-live--done {
+    background-color: var(--color-border);
+    color: var(--color-navy);
+}
+
+.dash-live--failed {
+    background-color: var(--color-red);
+    color: var(--color-white);
+}
+
+.dash-muted--failed {
+    color: var(--color-red);
+    font-weight: 600;
+}
+
+.dash-session-note {
+    margin-top: 16px !important;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--color-navy);
+}
+
+.dash-tag-failed {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    margin-left: 10px;
+    padding: 0 8px;
+    border-radius: 5px;
+    background-color: rgba(204, 27, 27, 0.12);
+    color: var(--color-red);
+    font-size: 13px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.dash-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.dash-use-btn--outline {
+    background-color: var(--color-white);
+    color: var(--color-navy);
+}

@@ -61,6 +61,8 @@ async def get_my_usages(
             time_started=usage.time_started,
             duration=usage.duration_seconds,
             cost=usage.cost,
+            failed=usage.failed,
+            failed_at=usage.failed_at,
         )
         for usage in machine_usages
     ]
@@ -93,6 +95,8 @@ async def get_my_usages(
             time_started=usage.time_started,
             duration=usage.duration_seconds,
             cost=usage.cost,
+            failed=usage.failed,
+            failed_at=usage.failed_at,
         )
         for usage in machine_usages
     ]

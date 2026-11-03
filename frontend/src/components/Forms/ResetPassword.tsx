@@ -1,9 +1,63 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AuthAPI } from 'src/apis/AuthAPI';
-import './styles/ResetPassword.scss';
+import styled from 'styled-components';
+import PageRuler from '../shared/PageRuler';
+import {
+    ANVIL_URL,
+    AnvilImage,
+    ButtonRow,
+    CardInner,
+    Divider,
+    FieldInput,
+    FieldLabel,
+    FieldRow,
+    FieldsContainer,
+    FormCard,
+    PageBackground,
+    RULER_URL,
+    StartMakingBtn,
+    Title,
+} from './Login';
 
-const logoSvg = new URL('../../assets/img/logo.svg', import.meta.url).href;
+const Description = styled.p`
+    font-family: var(--font-display, 'Funnel Display', sans-serif);
+    font-size: 15px;
+    color: #000;
+    text-align: center;
+    margin: 16px 20px 0;
+`;
+
+const Message = styled.p<{ $type: 'error' | 'success' }>`
+    font-family: var(--font-display, 'Funnel Display', sans-serif);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    margin: 12px 20px 0;
+    color: ${p => (p.$type === 'error' ? '#a51c1c' : '#1d7a48')};
+`;
+
+const WideBtn = styled(StartMakingBtn)`
+    width: auto;
+    min-width: clamp(130px, 13vw, 181px);
+    padding: 0 16px;
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+`;
+
+const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <PageBackground>
+        <AnvilImage src={ANVIL_URL} alt="" />
+        <PageRuler src={RULER_URL} side="left" zIndex={1} />
+        <FormCard>
+            <CardInner>{children}</CardInner>
+        </FormCard>
+    </PageBackground>
+);
 
 export default function ResetPassword() {
     const { token } = useParams<{ token: string }>();
@@ -89,66 +143,80 @@ export default function ResetPassword() {
     const isRequestForm = !token;
 
     return (
-        <div className='reset-password-container'>
-            <form onSubmit={handleResetRequest}>
-                <img src={logoSvg} alt='Forge logo' className='form-logo' />
-                <label>{isRequestForm ? 'Reset Your Password' : 'Choose a New Password'}</label>
-                <p className='description'>
+        <Shell>
+            <form onSubmit={handleResetRequest} style={{ width: '100%', display: 'contents' }}>
+                <Title>{isRequestForm ? 'Reset Your Password' : 'Choose a New Password'}</Title>
+                <Divider />
+                <Description>
                     {isRequestForm
-                        ? 'Enter your RCSID and we will send you a password reset link.'
-                        : 'Enter your RCSID and choose a new password for your Forge account.'}
-                </p>
+                        ? 'Enter your RCS ID and we will send you a password reset link.'
+                        : 'Enter your RCS ID and choose a new password for your Forge account.'}
+                </Description>
 
-                {error && <div className='error-message'>{error}</div>}
+                {error && <Message $type="error">{error}</Message>}
                 {success && (
-                    <div className='success-message'>
+                    <Message $type="success">
                         {isRequestForm
                             ? 'Check your RPI email for a password reset link.'
                             : 'Password reset successfully'}
-                    </div>
+                    </Message>
                 )}
 
                 {(!token || isTokenValid) && !success && (
                     <>
-                        <input
-                            type='text'
-                            placeholder='RCSID'
-                            value={rcsid}
-                            onChange={(event) => setRcsid(event.target.value)}
-                            required
-                        />
-                        {!isRequestForm && (
-                            <>
-                                <input
-                                    type='password'
-                                    placeholder='New password'
-                                    value={password}
-                                    onChange={(event) => setPassword(event.target.value)}
+                        <FieldsContainer>
+                            <FieldRow>
+                                <FieldLabel htmlFor="reset-rcsid">RCS ID</FieldLabel>
+                                <FieldInput
+                                    id="reset-rcsid"
+                                    type="text"
+                                    value={rcsid}
+                                    onChange={(event) => setRcsid(event.target.value)}
                                     required
+                                    autoComplete="username"
                                 />
-                                <input
-                                    type='password'
-                                    placeholder='Confirm new password'
-                                    value={confirmPassword}
-                                    onChange={(event) => setConfirmPassword(event.target.value)}
-                                    required
-                                />
-                            </>
-                        )}
-                        <div className='button-container'>
-                            <button type='submit' disabled={isLoading}>
+                            </FieldRow>
+                            {!isRequestForm && (
+                                <>
+                                    <FieldRow>
+                                        <FieldLabel htmlFor="reset-password">New Password</FieldLabel>
+                                        <FieldInput
+                                            id="reset-password"
+                                            type="password"
+                                            value={password}
+                                            onChange={(event) => setPassword(event.target.value)}
+                                            required
+                                            autoComplete="new-password"
+                                        />
+                                    </FieldRow>
+                                    <FieldRow>
+                                        <FieldLabel htmlFor="reset-confirm">Confirm Password</FieldLabel>
+                                        <FieldInput
+                                            id="reset-confirm"
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(event) => setConfirmPassword(event.target.value)}
+                                            required
+                                            autoComplete="new-password"
+                                        />
+                                    </FieldRow>
+                                </>
+                            )}
+                        </FieldsContainer>
+                        <ButtonRow>
+                            <WideBtn type="submit" disabled={isLoading}>
                                 {isLoading ? 'Please wait...' : isRequestForm ? 'Send Reset Link' : 'Reset Password'}
-                            </button>
-                        </div>
+                            </WideBtn>
+                        </ButtonRow>
                     </>
                 )}
 
                 {token && !isLoading && !isTokenValid && !success && (
-                    <div className='button-container'>
-                        <button type='button' onClick={() => navigate('/reset-password')}>Request a New Link</button>
-                    </div>
+                    <ButtonRow>
+                        <WideBtn type="button" onClick={() => navigate('/reset-password')}>Request a New Link</WideBtn>
+                    </ButtonRow>
                 )}
             </form>
-        </div>
+        </Shell>
     );
 }

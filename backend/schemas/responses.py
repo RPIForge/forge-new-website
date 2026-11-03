@@ -208,6 +208,8 @@ class UsageResponse(BaseResponse):
     duration: int
     machine_name: str
     cost: Decimal
+    failed: bool = False
+    failed_at: Optional[datetime] = None
 
 
 class MachineInfo(BaseModel):
