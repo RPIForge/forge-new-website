@@ -22,7 +22,7 @@ export const FailAMachineForm: React.FC = () => {
      */
     useEffect(() => {
         const fetchMachines = async () => {
-            const allMachines: Machine[] = await OmniAPI.getAll("machines");
+            const allMachines: Machine[] = await OmniAPI.getEvery("machines");
             setMachines(allMachines);
         };
 

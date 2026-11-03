@@ -91,6 +91,7 @@ export default function Login() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     required
+                    maxLength={8}
                     placeholder="RCS ID"
                 />
                 <input

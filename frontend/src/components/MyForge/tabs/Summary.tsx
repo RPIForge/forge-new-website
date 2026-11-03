@@ -86,7 +86,22 @@ const Summary: React.FC = () => {
             }
         };
     
+        // The user saved at login goes stale (e.g. semester_balance after a new usage),
+        // so refresh it whenever the summary is opened.
+        const refreshUser = async () => {
+            try {
+                const response = await AuthAPI.me();
+                if (response.status === 200 && response.data) {
+                    setUser(response.data);
+                    localStorage.setItem("user", JSON.stringify(response.data));
+                }
+            } catch (error) {
+                console.error("Error refreshing user data:", error);
+            }
+        };
+
         getUsages();
+        refreshUser();
     }, []);
     
     useEffect(() => {
@@ -229,7 +244,7 @@ const ListObject = ({ id, name, value }: ListObjectProps) => {
             <ul>
                 {value.map((usage) => (
                     <li key={usage.time_started.toString()}>
-                        <strong>{usage.machine_name}</strong> - {usage.time_started.toString()} - ${Number(usage.cost).toFixed(2)}
+                        <strong>{usage.machine_name}</strong> - {usage.time_started.toString()} - ${Number(usage.cost).toFixed(2)}{usage.is_reprint ? ' (reprint)' : ''}
                     </li>
                 ))}
             </ul>

@@ -2,5 +2,6 @@ venv/
 .vscode/
 poetry.lock
 .env
+.env.prod
 .DS_Store
 node_modules/

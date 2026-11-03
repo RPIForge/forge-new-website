@@ -61,6 +61,7 @@ async def get_my_usages(
             time_started=usage.time_started,
             duration=usage.duration_seconds,
             cost=usage.cost,
+            is_reprint=usage.is_reprint,
         )
         for usage in machine_usages
     ]
@@ -93,6 +94,7 @@ async def get_my_usages(
             time_started=usage.time_started,
             duration=usage.duration_seconds,
             cost=usage.cost,
+            is_reprint=usage.is_reprint,
         )
         for usage in machine_usages
     ]

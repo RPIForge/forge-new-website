@@ -31,13 +31,13 @@ $white-a11: rgba(255, 255, 255, 1);
     margin: 0;
     flex: 1 1 auto;
  
-    background-image:  url(background_desktop.png);
+    background-image:  url(/background_desktop.png);
     background-color: #D40000;
     
     background-size: cover;
     background-position: center;
     @media screen and (max-width: 768px) {
-        background-image: url(background_mobile.png);
+        background-image: url(../../assets/img/background_mobile.png);
     }
 }
 

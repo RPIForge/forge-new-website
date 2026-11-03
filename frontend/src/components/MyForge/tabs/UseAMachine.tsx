@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom"
 import '../../Forms/styles/Form.scss';
 import '../styles/UseAMachine.scss';
+import * as Select from '@radix-ui/react-select';
+import { ChevronDownIcon } from '@radix-ui/react-icons';
 import { AxiosError } from "axios";
 import useAuth from "src/components/Auth/useAuth";
 import { UserPermission } from "src/enums";
@@ -46,7 +48,7 @@ export const DynamicMachineForm: React.FC = () => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState<string>("0");
     const [schema, setSchema] = useState<MachineSchemaResponse>({});
-    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, org: false, reprint: false });
+    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, reprint: false });
     const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>([{
         slot_id: "_",
         name: "_",
@@ -67,7 +69,7 @@ export const DynamicMachineForm: React.FC = () => {
      */
     useEffect(() => {
         const fetchMachines = async () => {
-            const allMachines: Machine[] = await OmniAPI.getAll("machines");
+            const allMachines: Machine[] = await OmniAPI.getEvery("machines");
             console.log("All machines:", allMachines);
             setMachines(allMachines);
         };
@@ -144,6 +146,11 @@ export const DynamicMachineForm: React.FC = () => {
     }
     function clearStatus() {updateStatus("", "");}
 
+    const toCount = (value: unknown) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+    };
+
     /**
      * Handle Form Submission
      */
@@ -168,12 +175,13 @@ export const DynamicMachineForm: React.FC = () => {
             }
         });
 
-        const duration_seconds = Math.ceil((formData.hours * 3600) + (formData.minutes * 60));
+        const duration_seconds = Math.ceil((toCount(formData.hours) * 3600) + (toCount(formData.minutes) * 60));
         console.log("Resource Usages:", resource_usages);
         const usageData = {
-            as_org_id: formData.org ? formData.org : null,
+            as_org_id: null,
             duration_seconds: duration_seconds,
             resource_usages: resource_usages,
+            is_reprint: formData.reprint,
         };
 
         console.log("Usage Data:", usageData);
@@ -200,6 +208,12 @@ export const DynamicMachineForm: React.FC = () => {
                 updateStatus("The selected machine does not exist.", "error");
             } else if (error.status == 403) {
                 updateStatus("You are not permitted to use this machine.", "error");
+            } else if (error.status == 422) {
+                const problems = Array.isArray(error?.response?.data?.detail)
+                    ? error.response.data.detail.map((d: any) => `${(d.loc ?? []).slice(1).join(' → ')}: ${d.msg}`).join('; ')
+                    : detail;
+                console.error("Usage form rejected:", error?.response?.data);
+                updateStatus(`Some of the form data was invalid${problems ? ` (${problems})` : ''}. Please check the form and try again.`, "error");
             } else {
                 updateStatus("An error occurred. Please try again.", "error");
             }
@@ -228,6 +242,8 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if resource is selected
+        let amountWarning = "";
+
         if (page == 3) {
             const invalidSlot = slotValues.find((slot) => validateResourceUsage(slot));
             if (invalidSlot) {
@@ -235,30 +251,30 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            var invalidAmount = false;
+            if (slotValues.some((slot) => Number(slot.amount) < 0)) {
+                updateStatus("Please enter a valid amount of material", "error");
+                return;
+            }
 
-            slotValues.forEach((slot) => {
-                if (slot.amount < 0) {
-                    updateStatus("Please enter a valid amount of material", "error");
-                    invalidAmount = true;
-                }
-                if (slot.amount > 1000 && !slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`, "warning");
-                } else if (slot.amount > 1000 && slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`, "warning");
-                }
-            });
-
-            if (invalidAmount) return;
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 2000);
+            if (bigSlot) {
+                amountWarning = bigSlot.own
+                    ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
+                    : `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`;
+            }
         }
 
         //Check if duration is valid
-        if (page == 4 && ((formData.hours == 0 && formData.minutes == 0) || formData.hours < 0 || formData.minutes < 0)) {
+        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0)) {
             updateStatus("Please enter a valid duration.", "error");
             return;
         }
 
-        clearStatus();
+        if (amountWarning) {
+            updateStatus(amountWarning, "warning");
+        } else {
+            clearStatus();
+        }
         setPage(page);
     };
 
@@ -271,24 +287,36 @@ export const DynamicMachineForm: React.FC = () => {
                 {page == 1 &&
                     <div className="machine-selection">
                         <label>1. Machine Selection</label>
-                        <select
-                            className='styled-dropdown'
-                            value={selectedMachineId}
-                            onChange={(e) => handleSelectMachine(e.target.value)}
+                        <Select.Root
+                            value={selectedMachineId === "0" ? "" : selectedMachineId}
+                            onValueChange={handleSelectMachine}
                         >
-                            <option className='styled-dropdown-placeholder' value="0" hidden>{"Please Select a Machine"}</option>
-                            {machines.filter((machine: Machine) => canSeeDisabled || !machine.disabled).map((machine: Machine) => (
-                                <option
-                                    className='styled-dropdown-option'
-                                    key={machine.id}
-                                    value={machine.id}
-                                    disabled={machine.maintenance_mode || machine.disabled}
-                                >
-                                    {machine.name}
-                                    {machine.maintenance_mode ? ' (Under Maintenance)' : machine.disabled ? ' (Disabled)' : ''}
-                                </option>
-                            ))}
-                        </select>
+                            <Select.Trigger className="machine-select-trigger" aria-label="Select a machine">
+                                <Select.Value placeholder="Please Select a Machine" />
+                                <Select.Icon aria-hidden>
+                                    <ChevronDownIcon />
+                                </Select.Icon>
+                            </Select.Trigger>
+                            <Select.Portal>
+                                <Select.Content className="machine-select-content" position="popper" sideOffset={4}>
+                                    <Select.Viewport>
+                                        {machines.filter((machine: Machine) => canSeeDisabled || !machine.disabled).map((machine: Machine) => (
+                                            <Select.Item
+                                                className="machine-select-item"
+                                                key={machine.id}
+                                                value={machine.id}
+                                                disabled={machine.maintenance_mode || machine.disabled}
+                                            >
+                                                <Select.ItemText>
+                                                    {machine.name}
+                                                    {machine.maintenance_mode ? ' (Under Maintenance)' : machine.disabled ? ' (Disabled)' : ''}
+                                                </Select.ItemText>
+                                            </Select.Item>
+                                        ))}
+                                    </Select.Viewport>
+                                </Select.Content>
+                            </Select.Portal>
+                        </Select.Root>
                     </div>
                 }
 
@@ -308,7 +336,7 @@ export const DynamicMachineForm: React.FC = () => {
                             min="0"
                             placeholder="Hours"
                             onChange={(e) => setFormData((prev) => ({ ...prev, 'hours': e.target.valueAsNumber }))}
-                            value={formData.hours}
+                            value={Number.isNaN(formData.hours) ? '' : formData.hours}
                         />
                         <label htmlFor="hours">hr</label>
                         <input
@@ -320,7 +348,7 @@ export const DynamicMachineForm: React.FC = () => {
                             min="0"
                             placeholder="Minutes"
                             onChange={(e) => setFormData((prev) => ({ ...prev, 'minutes': e.target.valueAsNumber }))}
-                            value={formData.minutes}
+                            value={Number.isNaN(formData.minutes) ? '' : formData.minutes}
                         />
                         <label htmlFor="minutes">min</label>
                     </div>
@@ -332,7 +360,7 @@ export const DynamicMachineForm: React.FC = () => {
                             id='checkbox-usage-policy'
                             className='styled-checkbox'
                             type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'policy': e.target.value }))}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, 'policy': e.target.checked }))}
                         />
                         <label
                             htmlFor='checkbox-usage-policy'
@@ -342,23 +370,10 @@ export const DynamicMachineForm: React.FC = () => {
                             Do you agree to the Machine Usage Policy? 
                         </label>
                         <input
-                            id='checkbox-org-usage'
-                            className='styled-checkbox'
-                            type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'org': e.target.value }))}
-                        />
-                        <label
-                            htmlFor='checkbox-org-usage'
-                            className='checkbox-label'
-                        >
-                            Is this machine usage for an organization?
-                        </label>
-
-                        <input
                             id='checkbox-reprint'
                             className='styled-checkbox'
                             type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint': e.target.value }))}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint': e.target.checked }))}
                         />
                         <label
                             htmlFor='checkbox-reprint'
@@ -369,7 +384,7 @@ export const DynamicMachineForm: React.FC = () => {
                     </div>
                 }
 
-                <div id="status-text" className={`status-text ${status.type === "success" ? "success" : status.type === "error" ? "error" : ""}`}>{status.text}</div>
+                <div id="status-text" className={`status-text ${status.type === "success" ? "success" : status.type === "error" ? "error" : status.type === "warning" ? "warning" : ""}`}>{status.text}</div>
                 <div className="pagination-buttons">
                     <button type="button" onClick={() => {clearStatus(); setPage(page - 1)}} disabled={page === 1}>Back</button>
                     {page !== 4 && <button type="button" onClick={() => handlePageChange(page + 1)} disabled={page === 4}>Next</button>}
@@ -485,10 +500,7 @@ const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, slotValue, setSlotVal
         ) ?? null;
     };
 
-    const handleChange = (event: ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
-        const { name, value, type } = event.target;
-        const newValue = type === "checkbox" ? (event.target as HTMLInputElement).checked : value;
-
+    const updateSelectedDetails = (name: string, newValue: string | boolean) => {
         setSelectedDetails(prev => {
             let updatedDetails = { ...prev, [name]: newValue };
 
@@ -499,6 +511,12 @@ const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, slotValue, setSlotVal
 
             return updatedDetails;
         });
+    };
+
+    const handleChange = (event: ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
+        const { name, value, type } = event.target;
+        const newValue = type === "checkbox" ? (event.target as HTMLInputElement).checked : value;
+        updateSelectedDetails(name, newValue);
     };
 
     useEffect(() => {
@@ -522,24 +540,39 @@ const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, slotValue, setSlotVal
 
     return (
         <tr>
-            <td>{slot.display_name}</td>
+            <td data-label="Slot Name">{slot.display_name}</td>
             {/* Material Dropdown (Always available) */}
-            <td>
-                <select
-                    name="name"
+            <td data-label="Material">
+                <Select.Root
                     value={selectedDetails.name}
-                    onChange={handleChange}
+                    onValueChange={(value) => updateSelectedDetails("name", value)}
                     required={!slot.allow_empty}
                 >
-                    <option value="_">--Material--</option>
-                    {materialOptions.map(name => (
-                        <option key={name} value={name}>{name}</option>
-                    ))}
-                </select>
+                    <Select.Trigger className="resource-select-trigger" aria-label="Select material">
+                        <Select.Value />
+                        <Select.Icon aria-hidden>
+                            <ChevronDownIcon />
+                        </Select.Icon>
+                    </Select.Trigger>
+                    <Select.Portal>
+                        <Select.Content className="resource-select-content" position="popper" sideOffset={4}>
+                            <Select.Viewport>
+                                <Select.Item className="resource-select-item" value="_">
+                                    <Select.ItemText>--Material--</Select.ItemText>
+                                </Select.Item>
+                                {materialOptions.map(name => (
+                                    <Select.Item className="resource-select-item" key={name} value={name}>
+                                        <Select.ItemText>{name}</Select.ItemText>
+                                    </Select.Item>
+                                ))}
+                            </Select.Viewport>
+                        </Select.Content>
+                    </Select.Portal>
+                </Select.Root>
             </td>
 
             {/* Amount Input */}
-            <td>
+            <td data-label="Amount">
                 <input
                     type="number"
                     name="amount"
@@ -550,7 +583,7 @@ const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, slotValue, setSlotVal
             </td>
 
             {/* Own Checkbox */}
-            <td>
+            <td data-label="Personal Material">
                 <input
                     type="checkbox"
                     name="own"
@@ -560,10 +593,9 @@ const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, slotValue, setSlotVal
             </td>
 
             {/* Cost Display */}
-            <td>
+            <td data-label="Cost">
                 {"$" + cost.toFixed(2)}
             </td>
         </tr>
     );
 };
-

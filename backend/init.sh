@@ -10,4 +10,9 @@ alembic upgrade head
 python initial_data.py
 
 # Start the server
-fastapi run main.py --port 8000 --reload
+# Auto-reload only in development
+if [ "$ENVIRONMENT" = "DEV" ]; then
+  exec fastapi run main.py --port 8000 --reload
+else
+  exec fastapi run main.py --port 8000 --workers 2
+fi

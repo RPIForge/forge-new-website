@@ -31,7 +31,7 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, mach: MachineG
     const [machineIDS, setMachineIDS] = useState<string[]>([]);
 
     useEffect(() => {
-        OmniAPI.getAll("machines")
+        OmniAPI.getEvery("machines")
             .then((data: Machine[]) => setMachines(data))
             .catch(err => console.error("Error fetching machines:", err));
     }, []);
@@ -163,7 +163,7 @@ const MachineGroups: React.FC = () => {
     const fetchPage = (page: number) => {
         const offset = (page - 1) * ITEMS_PER_PAGE;
         let mappings: Record<string, string> = {};
-        OmniAPI.getAll("machines")
+        OmniAPI.getEvery("machines")
             .then((machines: Machine[]) => {
                 machines.forEach(m => mappings[m.id] = m.name);
                 return OmniAPI.getAll("machinegroups", { limit: ITEMS_PER_PAGE, offset });

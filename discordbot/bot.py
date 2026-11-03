@@ -1,4 +1,4 @@
-import discord, requests as r, pickle, os.path as p
+import discord, requests as r, pickle, os, os.path as p
 from dotenv import dotenv_values
 from discord import app_commands
 
@@ -9,7 +9,10 @@ from datetime import datetime, timedelta
 
 import random
 
-token = dotenv_values(".env")["TOKEN"]
+# Read settings from a local .env (dev) and/or real environment variables (docker env_file)
+config = {**dotenv_values(".env"), **os.environ}
+
+token = config["TOKEN"]
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -39,7 +42,7 @@ if p.exists("admins.pkl"):
     admins_pkl.close()
 
 if len(admins) == 0:
-    admins = [int(a) for a in dotenv_values(".env")["DEFAULT_ADMINS"].split(',')]
+    admins = [int(a) for a in config["DEFAULT_ADMINS"].split(',')]
 
 async def permcheck(inter: discord.Interaction) -> bool:
     if inter.user.id not in admins:

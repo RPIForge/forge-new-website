@@ -18,11 +18,11 @@ class BaseRequest(BaseModel):
 
 
 class UserCreateRequest(BaseRequest):
-    RCSID: str
+    RCSID: str = Field(min_length=1, max_length=8, pattern=r"^[a-zA-Z0-9]+$")
     RIN: RIN
 
-    first_name: str
-    last_name: str
+    first_name: str = Field(min_length=1, max_length=50)
+    last_name: str = Field(min_length=1, max_length=50)
 
     major: str
     gender_identity: GenderStatsType
@@ -94,7 +94,8 @@ class MachineUsageRequest(BaseRequest):
     # Map resource slot id to resource usage quantity details
     resource_usages: dict[UUID4, ResourceUsage]
     duration_seconds: int
-    as_org_id: Optional[UUID4]
+    as_org_id: Optional[UUID4] = None
+    is_reprint: bool = False
 
 
 class MachineGetTypeRequest(BaseRequest):
