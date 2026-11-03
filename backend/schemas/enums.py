@@ -42,6 +42,9 @@ class Permissions(StrEnum):
     # Allows use of machines between semesters (will not be charged)
     CAN_USE_MACHINES_BETWEEN_SEMESTERS = "canUseMachinesBetweenSemesters"
 
+    # Allows user to edit certain basic attributes in their account
+    CAN_EDIT_SELF = "canEditSelf"
+
     ## VOLUNTEER
     # Permissions in this section are necessary to perform
     # various duties of a volunteer.
@@ -59,7 +62,6 @@ class Permissions(StrEnum):
 
     # Allows the user to view user data belonging to other users
     CAN_SEE_USERS = "canSeeUsers"
-    CAN_EDIT_USERS = "canEditUsers"
 
     # Allows the user to see all getall tables
     CAN_SEE_TABLES = "canSeeTables"
@@ -129,6 +131,9 @@ class Permissions(StrEnum):
     CAN_DELETE_ROLES = "canDeleteRoles"
 
     CAN_CHANGE_USER_ROLES = "canChangeUserRoles"
+
+    # For editing user information
+    CAN_EDIT_USERS = "canEditUsers"
 
     # DAMAGE CONTROL
     # Roles used to combat abuse of website privileges.
