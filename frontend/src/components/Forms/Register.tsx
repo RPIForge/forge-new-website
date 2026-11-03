@@ -100,8 +100,8 @@ export default function Register() {
             return;
         }
 
-        if (formValues["rcsid"].length < 1 || formValues["rcsid"].length > 10){
-            alert("RCS ID must be between 1-10 characters");
+        if (formValues["rcsid"].length < 1){
+            alert("Please enter your RCS ID");
             return;
         }
 

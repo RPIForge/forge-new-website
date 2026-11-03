@@ -18,11 +18,11 @@ class BaseRequest(BaseModel):
 
 
 class UserCreateRequest(BaseRequest):
-    RCSID: str = Field(min_length=1, max_length=10, pattern=r"^[a-zA-Z0-9]+$")
+    RCSID: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9]+$")
     RIN: RIN
 
-    first_name: str = Field(min_length=1, max_length=50)
-    last_name: str = Field(min_length=1, max_length=50)
+    first_name: str = Field(min_length=1)
+    last_name: str = Field(min_length=1)
 
     major: str
     gender_identity: GenderStatsType
