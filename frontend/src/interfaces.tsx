@@ -105,8 +105,6 @@ export interface MachineUsage {
 export interface Resource {
     id: string;
     name: string;
-    brand?: string;
-    color?: string;
     units: string;
     cost: number;
 };
