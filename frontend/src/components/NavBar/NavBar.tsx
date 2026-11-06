@@ -7,6 +7,7 @@ import { ReactComponent as ForgeSVG } from 'src/assets/img/logo.svg';
 import { CaretDownIcon } from '@radix-ui/react-icons';
 import * as Avatar from '../MyForge/components/Avatar';
 import * as Hamburger from './Hamburger';
+import useAuth from '../Auth/useAuth';
 
 import './styles/UserMenu.scss';
 import './styles/NavBar.scss';
@@ -28,6 +29,7 @@ const UserMenu: React.FC<NavBarProps> = ({user, setAuth, isAuthed}) => {
         setAuth(false);
         setDefaultUser();
     }
+    const { logout } = useAuth();
     if (isAuthed){ return (
         <NavMenu.Item className='user-item'>
             <NavMenu.Trigger className='user-trigger'>
@@ -38,7 +40,7 @@ const UserMenu: React.FC<NavBarProps> = ({user, setAuth, isAuthed}) => {
                 <NavMenu.Link className='link' href="/myforge/create">Create</NavMenu.Link>
                 <NavMenu.Link className='link' href="/myforge">Summary</NavMenu.Link>
                 <NavMenu.Link className='link' href="/myforge/usages">Usages</NavMenu.Link>
-                <NavMenu.Link className='link' href="/" onSelect={(e) => onSignOut()}>Logout</NavMenu.Link>
+                <NavMenu.Link className='link' href="/" onSelect={(e) => logout()}>Logout</NavMenu.Link>
             </NavMenu.Content>
         </NavMenu.Item>
     )} else { return(

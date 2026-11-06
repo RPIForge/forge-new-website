@@ -100,8 +100,8 @@ export default function Register() {
             return;
         }
 
-        if (formValues["rcsid"].length > 8){
-            alert("Invalid RCS ID");
+        if (formValues["rcsid"].length < 1){
+            alert("Please enter your RCS ID");
             return;
         }
 

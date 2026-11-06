@@ -62,7 +62,7 @@ async def register_user(
     """Register a new Forge user and send verification email."""
 
     conflicting_users = await session.scalar(
-        select(User).where(or_(User.RCSID == request.RCSID, User.RIN == request.RIN))
+        select(User).where(or_(func.lower(User.RCSID) == request.RCSID.lower(), User.RIN == request.RIN))
     )
     if conflicting_users is not None:
         raise HTTPException(
@@ -75,7 +75,7 @@ async def register_user(
         current_semester_id = None
 
     new_user = User(
-        RCSID=request.RCSID,
+        RCSID=request.RCSID.lower(),
         RIN=request.RIN,
         first_name=request.first_name,
         last_name=request.last_name,

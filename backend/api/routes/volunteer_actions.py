@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Annotated
 from azure.communication.email import EmailClient
@@ -119,6 +120,12 @@ async def fail_machine(
             detail="This machine does not have an active usage",
         )
 
+    if machine.active_usage.failed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This machine's usage has already been failed",
+        )
+
     audit_log = AuditLog(
         type=LogType.MACHINE_USAGE_FAILED,
         content={
@@ -136,9 +143,16 @@ async def fail_machine(
     session.add(machine)
     await session.commit()
 
-    await send_failure_email(
-        f"{machine.active_usage.user.RCSID}@rpi.edu",
-        machine.name,
-        str(request.percentage),
-    )
+    try:
+        await send_failure_email(
+            f"{machine.active_usage.user.RCSID}@rpi.edu",
+            machine.name,
+            str(request.percentage),
+        )
+    except Exception:
+        logging.exception("Failed to send machine failure email")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The machine was marked as failed, but the email to the user could not be sent.",
+        )
 

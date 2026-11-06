@@ -49,6 +49,10 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     // Needed in order to not show the alert in the protected route
     const [suppressAlertInProtectedRoute, setSuppressAlertInProtectedRoute] = useState(false);
 
+    useEffect(() => {
+        if (isAuthenticated) setSuppressAlertInProtectedRoute(false);
+    }, [isAuthenticated]);
+
     const [warningShown, setWarningShown] = useState(false);
 
     const [showWarningDialog, setShowWarningDialog] = useState(false);

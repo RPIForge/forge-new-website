@@ -285,6 +285,8 @@
 
 #status-text {
     font-size: 0.8em;
+    max-width: 32rem;
+    text-align: center;
 }
 
 #status-text.success {

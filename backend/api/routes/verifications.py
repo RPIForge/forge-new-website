@@ -186,7 +186,7 @@ async def reset_password(
         return response
 
     user = await session.get(User, auth_token.user_id)
-    if user is None or user.RCSID != request.rcsid:
+    if user is None or user.RCSID.lower() != request.rcsid.lower():
         return VerificationTokenResponse(token_type=TokenType.PASSWORD_RESET, success=False)
 
     user.hashed_password = get_password_hash(request.new_password)
@@ -240,7 +240,7 @@ async def create_password_token(
 
     current_user = await session.scalar(
         select(User).where(
-            User.RCSID == request.rcsid
+            func.lower(User.RCSID) == request.rcsid.lower()
         )
     )
 
