@@ -7,12 +7,79 @@ import useAuth from '../../Auth/useAuth';
 
 import '../styles/TabStyles.scss';
 
+interface aemenuprops {
+    isDialogOpen: boolean;
+    setIsDialogOpen: (open: boolean) => void;
+    user: User | null;
+    setUser (user: User | null) => void;
+    refresh: () => void;
+}
+
+const AEMenu = (props: aemenuprops): [ReactNode, (state: boolean, user: User | null) => void] => {
+    let {isDialogOpen, setIsDialogOpen, user, setUser, refresh} =  props;
+
+    const { hasPermission } = useAuth();
+    const canEdit = hasPermission(UserPermission.CAN_EDIT_USERS);
+    const canSeeTables = hasPermission(UserPermission.CAN_SEE_USERS);
+
+    const [isRpiStaff, setIsRpiStaff] = useState(false);
+    const [RCSID, setRCSID] = useState("");
+    const [RIN, setRIN] = useState("");
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [major, setMajor] = useState("");
+    const [genderIdentity, setGenderIdentity] = useState("");
+    const [pronouns, setPronouns] = useState("");
+    const [isGraduating, setIsGraduating] = useState(false);
+    
+    const setOpenExtra = (state: boolean, user: User | null) => {
+        setUser(user);
+        if (user != null) {
+            setIsRpiStaff(user.is_rpi_staff?user.is_rpi_staff:false);
+            setRCSID(user.RCSID?user.RCSID:"");
+            setRIN(user.RIN?user.RIN:"");
+            setFirstName(user.first_name?user.first_name:"");
+            setLastName(user.last_name?user.last_name:"");
+            setMajor(user.major?user.major:"");
+            setGenderIdentity(user.gender_identity?user.gender_identity:"");
+            setPronouns(user.pronouns?user.pronouns:"");
+            setIsGraduating(user.is_graduating?user.is_graduating:false);
+        } else {
+            setIsRpiStaff(false);
+            setRCSID("");
+            setRIN("");
+            setFirstName("");
+            setLastName("");
+            setMajor("");
+            setGenderIdentity("");
+            setPronouns("");
+            setIsGraduating(false);
+        }
+        if (isDialogOpen != state) setIsDialogOpen(state);
+    };
+
+    function edit() {
+        if (!canEdit) {
+            alert("You do not have the permissions to edit users");
+            return;
+        }
+        if (user == null) {return}
+        OmniAPI.edit("users", user.id, {is_rpi_staff: isRpiStaff, RCSID: RCSID, RIN: RIN, first_name: firstName, last_name: lastName, major: major, gender_identity: genderIdentity, pronouns: pronouns, is_graduating: isGraduating})
+        .then( () => {
+            refresh();
+            setOpenExtra(false, null);
+        });
+    }
+
+    
+}
 
 const Users: React.FC = () => {
 
     const { hasPermission } = useAuth();
     const canSeeUsers = hasPermission(UserPermission.CAN_SEE_USERS);
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
+    const canEdit = hasPermission(UserPermission.CAN_EDIT_USERS);
 
     const [data, setData] = React.useState<User[]>([]);
     //change this to fix gender id
