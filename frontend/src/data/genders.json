@@ -1,0 +1,6 @@
+{"Genders": [
+    {"Gender": "female", "Display Value": "Female"},
+    {"Gender": "male", "Display Value": "Male"},
+    {"Gender": "other", "Display Value": "Other"},
+    {"Gender": "notdisclosed", "Display Value": "Not Disclosed"}
+]}

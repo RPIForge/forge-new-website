@@ -3,6 +3,8 @@ export enum UserPermission {
     CAN_USE_MACHINES = "canUseMachines",
     CAN_USE_MACHINES_BETWEEN_SEMESTERS = "canUseMachinesBetweenSemesters",
 
+    CAN_EDIT_SELF = "canEditSelf",
+
     // //  VOLUNTEER
     CAN_CLEAR_MACHINES = "canClearMachines",
     CAN_FAIL_MACHINES = "canFailMachines",
@@ -70,6 +72,8 @@ export enum UserPermission {
     CAN_DELETE_ROLES = "canDeleteRoles",
 
     CAN_CHANGE_USER_ROLES = "canChangeUserRoles",
+
+    CAN_EDIT_USERS = "canEditUsers",
 
     // DAMAGE CONTROL
 
