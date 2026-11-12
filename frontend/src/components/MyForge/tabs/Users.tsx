@@ -199,7 +199,7 @@ const Users: React.FC = () => {
 
     const [data, setData] = React.useState<User[]>([]);
     //change this to fix gender id
-    const columns: (keyof User)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof User)[]).filter((key) => !key.includes('_id') && key !== 'id') : [];
+    const columns: (keyof User)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof User)[]).filter((key) => key !== 'id') : [];
     const [currentPage, setCurrentPage] = useState(1);
 
     const fetchPage = (page: number) => {
