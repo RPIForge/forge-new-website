@@ -461,6 +461,67 @@
     }
 }
 
+@mixin stacked-table-rows {
+    thead {
+        display: none;
+    }
+
+    table,
+    tbody,
+    tr,
+    td {
+        display: block;
+        width: 100%;
+    }
+
+    tr {
+        position: relative;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    table.has-actions tr {
+        padding-right: 64px;
+    }
+
+    td,
+    th:first-of-type,
+    td:first-of-type {
+        display: grid;
+        grid-template-columns: 110px minmax(0, 1fr);
+        gap: 8px;
+        height: auto;
+        padding: 3px 0;
+        border: none;
+        font-size: 15px;
+    }
+
+    td::before {
+        content: attr(data-label);
+        font-weight: 700;
+        font-size: 13px;
+        text-transform: uppercase;
+        color: var(--color-navy);
+    }
+
+    tr:last-of-type td {
+        border-bottom: none;
+    }
+
+    td.icon {
+        position: absolute;
+        top: 10px;
+        right: 12px;
+        display: block;
+        width: auto;
+        padding: 0;
+
+        &::before {
+            content: none;
+        }
+    }
+}
+
 // Admin tables: text wraps inside the card instead of each cell or the whole table scrolling
 .admin-content {
     .table-container {
@@ -523,64 +584,18 @@
     // Phones: each row becomes a small card of "Label: value" lines
     @media (max-width: 700px) {
         .table-container {
-            thead {
-                display: none;
-            }
+            @include stacked-table-rows;
+        }
+    }
 
-            table,
-            tbody,
-            tr,
-            td {
-                display: block;
-                width: 100%;
-            }
+    // Wide tables (like Users) stack sooner so they never need sideways scrolling
+    .table-container.is-compact th {
+        font-size: 16px;
+    }
 
-            tr {
-                position: relative;
-                padding: 10px 16px;
-                border-bottom: 1px solid var(--color-border);
-            }
-
-            table.has-actions tr {
-                padding-right: 64px;
-            }
-
-            td,
-            th:first-of-type,
-            td:first-of-type {
-                display: grid;
-                grid-template-columns: 110px minmax(0, 1fr);
-                gap: 8px;
-                height: auto;
-                padding: 3px 0;
-                border: none;
-                font-size: 15px;
-            }
-
-            td::before {
-                content: attr(data-label);
-                font-weight: 700;
-                font-size: 13px;
-                text-transform: uppercase;
-                color: var(--color-navy);
-            }
-
-            tr:last-of-type td {
-                border-bottom: none;
-            }
-
-            td.icon {
-                position: absolute;
-                top: 10px;
-                right: 12px;
-                display: block;
-                width: auto;
-                padding: 0;
-
-                &::before {
-                    content: none;
-                }
-            }
+    @media (max-width: 1200px) {
+        .table-container.is-compact {
+            @include stacked-table-rows;
         }
     }
 }

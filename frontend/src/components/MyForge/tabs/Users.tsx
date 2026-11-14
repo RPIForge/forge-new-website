@@ -8,6 +8,18 @@ import useAuth from '../../Auth/useAuth';
 import '../styles/TabStyles.scss';
 
 
+// Matches PronounType in backend/schemas/enums.py
+const PRONOUN_LABELS: Record<string, string> = {
+    not_shown: 'Not shown',
+    they_them: 'They/Them',
+    he_him: 'He/Him',
+    she_her: 'She/Her',
+    he_they: 'He/They',
+    she_they: 'She/They',
+    all_any: 'Any',
+    use_name: 'Use my name',
+};
+
 const Users: React.FC = () => {
 
     const { hasPermission } = useAuth();
@@ -22,28 +34,22 @@ const Users: React.FC = () => {
     const columnDefs: ColumnDef<User>[] = [
         {
             key: 'name',
-            label: 'Name',
+            label: 'Name / Pronouns',
             render: (u) => (
                 <span className="cell-stack">
                     <strong>{u.first_name} {u.last_name}</strong>
-                    <small>{u.RCSID}</small>
+                    <small>{u.RCSID} · {PRONOUN_LABELS[u.pronouns] ?? formatCell(u.pronouns)}</small>
                 </span>
             ),
-            text: (u) => `${u.first_name} ${u.last_name} (${u.RCSID})`,
+            text: (u) => `${u.first_name} ${u.last_name} (${u.RCSID}, ${PRONOUN_LABELS[u.pronouns] ?? u.pronouns})`,
         },
         { key: 'rin', label: 'RIN', render: (u) => u.RIN },
         { key: 'major', label: 'Major', render: (u) => formatCell(u.major) },
         { key: 'role', label: 'Role', render: (u) => formatCell(u.display_role) },
         { key: 'balance', label: 'Balance', render: (u) => `$${Number(u.semester_balance ?? 0).toFixed(2)}` },
-        {
-            key: 'status',
-            label: 'Status',
-            render: (u) => [
-                u.is_email_verified ? 'Verified' : 'Unverified',
-                u.is_graduating && 'Graduating',
-                u.is_rpi_staff && 'Staff',
-            ].filter(Boolean).join(' · '),
-        },
+        { key: 'graduating', label: 'Graduating', render: (u) => formatCell(Boolean(u.is_graduating)) },
+        { key: 'staff', label: 'RPI Staff', render: (u) => formatCell(Boolean(u.is_rpi_staff)) },
+        { key: 'verified', label: 'Email', render: (u) => u.is_email_verified ? 'Verified' : 'Unverified' },
     ];
 
     const onDelete = (index_local: number, index_real: number) => {
@@ -58,6 +64,7 @@ const Users: React.FC = () => {
             />
             <Table<User>
                 columnDefs={columnDefs}
+                compact
                 loading={loading}
                 error={error}
                 hasNext={hasNext}

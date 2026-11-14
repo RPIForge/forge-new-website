@@ -24,6 +24,8 @@ interface TableProps<T> {
     // When the parent already knows if there is another page, skip the extra request
     hasNext?: boolean;
     emptyMessage?: string;
+    // Smaller headers, and switches to stacked rows sooner, for tables with many columns
+    compact?: boolean;
     canEdit?: boolean;
     canDelete?: boolean;
     onEdit?: (activeItem: T) => void;
@@ -140,7 +142,7 @@ export function TableHead<T>(props: TableHeadProps<T>) {
 }
 
 function Table<T>(props: TableProps<T>) {
-    const { columns = [], columnDefs, data, onDelete, onEdit, canEdit, canDelete, loading, error, emptyMessage } = props;
+    const { columns = [], columnDefs, data, onDelete, onEdit, canEdit, canDelete, loading, error, emptyMessage, compact } = props;
     const hasNextProp = props.hasNext;
     const {
         currentPage: currentPageProp,
@@ -222,7 +224,7 @@ function Table<T>(props: TableProps<T>) {
         return <p className="table-message">{emptyMessage ?? 'No items are present.'}</p>;
     } else {
         return (
-            <div className="table-container">
+            <div className={compact ? 'table-container is-compact' : 'table-container'}>
                 <table className={[hasEditOrDelete ? 'has-actions' : '', loading ? 'is-loading' : ''].join(' ').trim() || undefined}>
                     <thead>
                         <tr>
