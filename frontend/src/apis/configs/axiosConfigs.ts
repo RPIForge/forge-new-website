@@ -21,23 +21,43 @@ export const publicApi = axios.create({
     baseURL: API_BASE_URL
 });
 
+// Refreshing the token used to happen before every single request, which doubled the
+// time every page took to load and could wipe the token if one of the parallel
+// refreshes failed. Now all requests share one refresh, at most once a minute.
+const REFRESH_EVERY_MS = 60_000;
+let lastRefresh = 0;
+let refreshInFlight: Promise<void> | null = null;
+
+const refreshToken = () => {
+    if (!refreshInFlight) {
+        refreshInFlight = AuthAPI.refresh()
+            .then((refreshResponse) => {
+                localStorage.setItem("authToken", refreshResponse.data.access_token);
+                localStorage.setItem("token_expiration", String(refreshResponse.data.expires_at));
+                lastRefresh = Date.now();
+            })
+            .catch((err) => {
+                // Only a rejected token means the session is over; network hiccups keep the old token
+                if (err?.response?.status === 401) {
+                    localStorage.removeItem("authToken");
+                    localStorage.removeItem("token_expiration");
+                }
+                console.error("Token refresh failed:", err);
+            })
+            .finally(() => {
+                refreshInFlight = null;
+            });
+    }
+    return refreshInFlight;
+};
+
 api.interceptors.request.use(
     async (config) => {
-        try {
-            const refreshResponse = await AuthAPI.refresh();
-
-            const newToken = refreshResponse.data.access_token;
-            const newExpiration = refreshResponse.data.expires_at;
-
-            localStorage.setItem("authToken", newToken);
-            localStorage.setItem("token_expiration", newExpiration);
-
-            config.headers.Authorization = `Bearer ${newToken}`;
-        } catch (err) {
-            console.error("Token refresh failed:", err);
-            localStorage.removeItem("authToken");
-            localStorage.removeItem("token_expiration");
+        if (localStorage.getItem("authToken") && Date.now() - lastRefresh > REFRESH_EVERY_MS) {
+            await refreshToken();
         }
+        const token = localStorage.getItem("authToken");
+        if (token) config.headers.Authorization = `Bearer ${token}`;
         return config;
     },
     (error) => {

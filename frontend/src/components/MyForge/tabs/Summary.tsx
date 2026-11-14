@@ -212,7 +212,10 @@ const Summary: React.FC = () => {
         const totals = new Map<string, number>();
         machineUsages
             .filter((usage) => semesterLabel(usage.semester) === currentSemester)
-            .forEach((usage) => totals.set(usage.machine_name, (totals.get(usage.machine_name) ?? 0) + Number(usage.cost)));
+            .forEach((usage) => {
+                const type = usage.machine_type_name || usage.machine_name;
+                totals.set(type, (totals.get(type) ?? 0) + Number(usage.cost));
+            });
         const rows = Array.from(totals, ([machine, cost]) => ({ machine, cost })).sort((a, b) => b.cost - a.cost);
         const max = Math.max(...rows.map((row) => row.cost), 0);
         return rows.map((row) => ({ ...row, share: max > 0 ? row.cost / max : 0 }));
@@ -341,7 +344,7 @@ const Summary: React.FC = () => {
                 <PageRuler src={rulerMask} color='var(--color-red)' width={79} zIndex={2} />
                 <div className='dash-inner'>
                     <div className='dash-row-head'>
-                        <h2 className='dash-subtitle'>Your Spending by Machine</h2>
+                        <h2 className='dash-subtitle'>Your Spending by Machine Type</h2>
                         <p className='dash-period'>This Semester</p>
                     </div>
                     <div className='dash-panel dash-spending'>

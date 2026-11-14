@@ -1,11 +1,11 @@
 import React, { ReactNode, useState } from 'react';
 import { OmniAPI } from 'src/apis/OmniAPI';
-import Table, { DeleteItem, ITEMS_PER_PAGE, TableHead } from '../components/Table';
+import Table, { DeleteItem, ITEMS_PER_PAGE, TableHead, ColumnDef, formatCell, usePagedList } from '../components/Table';
 import { Role } from 'src/interfaces';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
-import * as Dialog from '@radix-ui/react-dialog';
-import { Cross2Icon, PlusIcon } from '@radix-ui/react-icons';
+import { PlusIcon } from '@radix-ui/react-icons';
+import { AdminCheck, AdminField, AdminFormDialog, AdminFormHeading, errorMessage } from '../../Admin/AdminForm';
 // @ts-ignore temporary: stylesheet module typing not configured in this project path yet // this'll get fixed soon
 import '../styles/TabStyles.scss';
 
@@ -17,6 +17,48 @@ interface AEMenuProps {
     refresh: () => void;
 }
 
+const P = UserPermission;
+
+// Permissions grouped the same way as the role form in the design
+const PERMISSION_GROUPS: { label: string; permissions: UserPermission[] }[] = [
+    { label: 'Member', permissions: [P.CAN_USE_MACHINES, P.CAN_USE_MACHINES_BETWEEN_SEMESTERS] },
+    { label: 'Volunteer', permissions: [P.CAN_CLEAR_MACHINES, P.CAN_FAIL_MACHINES, P.CAN_VIEW_FAILURE_LOGS] },
+    { label: 'Admin Page', permissions: [P.CAN_SEE_TABLES, P.CAN_SEE_USERS, P.CAN_EDIT_USER_CORE_INFO, P.CAN_CREATE_ORGS] },
+    { label: 'Machines', permissions: [P.CAN_SEE_MACHINES, P.CAN_CREATE_MACHINES, P.CAN_EDIT_MACHINES, P.CAN_DELETE_MACHINES] },
+    { label: 'Machine Types', permissions: [P.CAN_SEE_MACHINE_TYPES, P.CAN_CREATE_MACHINE_TYPES, P.CAN_EDIT_MACHINE_TYPES, P.CAN_DELETE_MACHINE_TYPES] },
+    { label: 'Machine Groups', permissions: [P.CAN_SEE_MACHINE_GROUPS, P.CAN_CREATE_MACHINE_GROUPS, P.CAN_EDIT_MACHINE_GROUPS, P.CAN_DELETE_MACHINE_GROUPS] },
+    { label: 'Resources', permissions: [P.CAN_SEE_RESOURCES, P.CAN_CREATE_RESOURCES, P.CAN_EDIT_RESOURCES, P.CAN_DELETE_RESOURCES] },
+    { label: 'Resource Slots', permissions: [P.CAN_SEE_RESOURCE_SLOTS, P.CAN_CREATE_RESOURCE_SLOTS, P.CAN_EDIT_RESOURCE_SLOTS, P.CAN_DELETE_RESOURCE_SLOTS] },
+    { label: 'Semesters & Charges', permissions: [P.CAN_SEE_SEMESTERS, P.CAN_CREATE_SEMESTERS, P.CAN_EDIT_SEMESTERS, P.CAN_DELETE_SEMESTERS, P.CAN_CHANGE_SEMESTER, P.CAN_GET_CHARGES] },
+    { label: 'Roles', permissions: [P.CAN_SEE_ROLES, P.CAN_CREATE_ROLES, P.CAN_EDIT_ROLES, P.CAN_DELETE_ROLES, P.CAN_CHANGE_USER_ROLES] },
+    { label: 'Safety', permissions: [P.ROLE_CHANGE_IMMUNE, P.CAN_CONTROL_LOCKOUT, P.LOCKOUT] },
+    { label: 'Superuser', permissions: [P.IS_SUPERUSER] },
+];
+
+const PERMISSION_LABELS: Partial<Record<UserPermission, string>> = {
+    [P.CAN_USE_MACHINES]: 'Use a Machine',
+    [P.CAN_USE_MACHINES_BETWEEN_SEMESTERS]: 'Use a Machine in Summer',
+    [P.CAN_CLEAR_MACHINES]: 'Clear Machines',
+    [P.CAN_FAIL_MACHINES]: 'Fail Machines',
+    [P.CAN_SEE_TABLES]: 'Open the Admin Page',
+    [P.CAN_GET_CHARGES]: 'Get Charge Sheets',
+    [P.CAN_CHANGE_SEMESTER]: 'Change the Current Semester',
+    [P.CAN_CHANGE_USER_ROLES]: 'Change User Roles',
+    [P.ROLE_CHANGE_IMMUNE]: 'Immune to Role Changes',
+    [P.LOCKOUT]: 'Locked Out',
+    [P.IS_SUPERUSER]: 'Superuser',
+};
+
+// "canSeeMachineTypes" -> "See Machine Types"
+const permissionLabel = (perm: UserPermission) =>
+    PERMISSION_LABELS[perm] ?? perm.replace(/^can/, '').replace(/([A-Z])/g, ' $1').trim();
+
+const groupedPermissions = (() => {
+    const listed = new Set(PERMISSION_GROUPS.flatMap((group) => group.permissions));
+    const other = Object.values(UserPermission).filter((perm) => !listed.has(perm));
+    return other.length ? [...PERMISSION_GROUPS, { label: 'Other', permissions: other }] : PERMISSION_GROUPS;
+})();
+
 const aemenu = (props: AEMenuProps): [ReactNode, (state: boolean, role: Role | null) => void] => {
     const { isDialogOpen, setIsDialogOpen, role, setRole, refresh } = props;
 
@@ -25,197 +67,132 @@ const aemenu = (props: AEMenuProps): [ReactNode, (state: boolean, role: Role | n
     const canEdit = hasPermission(UserPermission.CAN_EDIT_ROLES);
 
     const [name, setName] = useState('');
-    const [priority, setPriority] = useState(0);
+    const [priority, setPriority] = useState<number | ''>(0);
     const [displayRole, setDisplayRole] = useState(false);
     const [permissions, setPermissions] = useState<UserPermission[]>([]);
     const [inversePermissions, setInversePermissions] = useState<UserPermission[]>([]);
-
-    const allPermissions = Object.values(UserPermission);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
 
     const setOpenExtra = (state: boolean, activeRole: Role | null) => {
+        setError('');
         setRole(activeRole);
-        if (activeRole) {
-            setName(activeRole.name);
-            setPriority(activeRole.priority);
-            setDisplayRole(activeRole.display_role);
-            setPermissions((activeRole.permissions ?? []) as UserPermission[]);
-            setInversePermissions((activeRole.inverse_permissions ?? []) as UserPermission[]);
-        } else {
-            setName('');
-            setPriority(0);
-            setDisplayRole(false);
-            setPermissions([]);
-            setInversePermissions([]);
-        }
-        if (isDialogOpen !== state) {
-            setIsDialogOpen(state);
-        }
+        setName(activeRole?.name ?? '');
+        setPriority(activeRole?.priority ?? 0);
+        setDisplayRole(activeRole?.display_role ?? false);
+        setPermissions((activeRole?.permissions ?? []) as UserPermission[]);
+        setInversePermissions((activeRole?.inverse_permissions ?? []) as UserPermission[]);
+        if (isDialogOpen !== state) setIsDialogOpen(state);
     };
 
+    // Y grants a permission, N explicitly takes it away; a permission can't be both
     const togglePermission = (perm: UserPermission) => {
-        const includesPermission = permissions.includes(perm);
-        if (includesPermission) {
+        if (permissions.includes(perm)) {
             setPermissions((prev) => prev.filter((p) => p !== perm));
             return;
         }
-
         setPermissions((prev) => [...prev, perm]);
         setInversePermissions((prev) => prev.filter((p) => p !== perm));
     };
 
     const toggleInversePermission = (perm: UserPermission) => {
-        const hasInversePermission = inversePermissions.includes(perm);
-        if (hasInversePermission) {
+        if (inversePermissions.includes(perm)) {
             setInversePermissions((prev) => prev.filter((p) => p !== perm));
             return;
         }
-
         setInversePermissions((prev) => [...prev, perm]);
         setPermissions((prev) => prev.filter((p) => p !== perm));
     };
 
-    const create = () => {
-        if (!canCreate) {
-            alert('You do not have the permissions to create roles');
+    const save = async () => {
+        if (role == null ? !canCreate : !canEdit) {
+            setError('You do not have the permissions to do this.');
             return;
         }
         if (!name.trim()) {
-            alert('Role name is required');
+            setError('Role name is required.');
             return;
         }
-
-        OmniAPI.create('roles', {
-            name: name.trim(),
-            permissions: permissions,
-            inverse_permissions: inversePermissions,
-            display_role: displayRole,
-            priority: priority,
-        }).then(() => {
+        setBusy(true);
+        setError('');
+        try {
+            const body = {
+                name: name.trim(),
+                permissions,
+                inverse_permissions: inversePermissions,
+                display_role: displayRole,
+                priority: priority === '' ? 0 : priority,
+            };
+            if (role) await OmniAPI.edit('roles', role.id, { role_id: role.id, ...body });
+            else await OmniAPI.create('roles', body);
             refresh();
             setOpenExtra(false, null);
-        });
-    };
-
-    const edit = () => {
-        if (!canEdit) {
-            alert('You do not have the permissions to edit roles');
-            return;
+        } catch (err) {
+            setError(errorMessage(err, 'Could not save the role.'));
+        } finally {
+            setBusy(false);
         }
-        if (!role) return;
-        if (!name.trim()) {
-            alert('Role name is required');
-            return;
-        }
-        
-
-        OmniAPI.edit('roles', role.id, {
-            role_id: role.id,
-            name: name.trim(),
-            permissions: permissions,
-            inverse_permissions: inversePermissions,
-            display_role: displayRole,
-            priority: priority,
-        }).then(() => {
-            refresh();
-            setOpenExtra(false, null);
-        });
     };
 
     if (!canCreate && !canEdit) return [null, () => {}];
     return [(
-        <Dialog.Root open={isDialogOpen} onOpenChange={(open) => setOpenExtra(open, role)}>
-            {canCreate && (
-                <button className="addbtn" onClick={() => setOpenExtra(true, null)}>
-                    <PlusIcon />
-                </button>
+        <AdminFormDialog
+            open={isDialogOpen}
+            onOpenChange={(open) => setOpenExtra(open, role)}
+            title={role == null ? 'Adding a Role' : 'Editing a Role'}
+            onSubmit={save}
+            busy={busy}
+            error={error}
+            trigger={canCreate && (
+                <button className="addbtn" aria-label="Add a role" onClick={() => setOpenExtra(true, null)}><PlusIcon /></button>
             )}
-            {(canCreate || canEdit) && (
-                <Dialog.Portal>
-                    <div className='AEdiv'>
-                        <Dialog.Overlay className="DialogOverlay" />
-                        <Dialog.Content className="DialogContent" aria-describedby={undefined}>
-                            <Dialog.Close asChild>
-                                <button className="IconButton" aria-label="Close">
-                                    <Cross2Icon />
-                                </button>
-                            </Dialog.Close>
-                            <Dialog.Title className="DialogTitle">{role == null ? 'Adding' : 'Editing'} Role</Dialog.Title>
+        >
+            <AdminField label="Name" htmlFor="role-name">
+                <input id="role-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required />
+            </AdminField>
+            <AdminField label="Priority" htmlFor="role-priority">
+                <input
+                    id="role-priority"
+                    type="number"
+                    inputMode="numeric"
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value === '' ? '' : Number(e.target.value))}
+                />
+            </AdminField>
+            <AdminCheck id="role-display" label="Display Role" checked={displayRole} onChange={setDisplayRole} />
 
-                            <fieldset className="Fieldset">
-                                <label className="Label" htmlFor="role-name">Name</label>
+            <AdminFormHeading>Permission Settings</AdminFormHeading>
+            <div className="admin-form__perms">
+                <div className="admin-form__perm-head" aria-hidden="true">
+                    <span />
+                    <span>Y</span>
+                    <span>N</span>
+                </div>
+                {groupedPermissions.map((group) => (
+                    <div key={group.label} role="group" aria-label={group.label}>
+                        <p className="admin-form__perm-group">{group.label}</p>
+                        {group.permissions.map((perm) => (
+                            <div className="admin-form__perm-row" key={perm}>
+                                <span>{permissionLabel(perm)}</span>
                                 <input
-                                    className="Input"
-                                    id="role-name"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    maxLength={100}
-                                />
-
-                                <label className="Label" htmlFor="role-priority">Priority</label>
-                                <input
-                                    className="Input"
-                                    id="role-priority"
-                                    type="number"
-                                    value={priority}
-                                    onChange={(e) => setPriority(Number(e.target.value) || 0)}
-                                />
-
-                                <label className="Label" htmlFor="display-role">Display role?</label>
-                                <input
-                                    className="styled-checkbox"
-                                    id="display-role"
                                     type="checkbox"
-                                    checked={displayRole}
-                                    onChange={(e) => setDisplayRole(e.target.checked)}
+                                    aria-label={`Grant ${permissionLabel(perm)}`}
+                                    checked={permissions.includes(perm)}
+                                    onChange={() => togglePermission(perm)}
                                 />
-
-                                <label className="Label" htmlFor="permissions"><div>Permission Settings</div></label>
-                                <div
-                                    id="permissions"
-                                    style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: '32px 32px minmax(0, 1fr)',
-                                        columnGap: '10px',
-                                        rowGap: '8px',
-                                        alignItems: 'center',
-                                    }}
-                                >
-                                    <div className='checkbox-label' style={{ textAlign: 'center'}}>Y</div>
-                                    <div className='checkbox-label' style={{ textAlign: 'center'}}>N</div>
-                                    <div className='checkbox-label'> Permission</div>
-
-                                    {allPermissions.map((permission) => (
-                                        <React.Fragment key={`perm-${permission}`}>
-                                            <input
-                                                className='styled-checkbox'
-                                                type="checkbox"
-                                                checked={permissions.includes(permission)}
-                                                onChange={() => togglePermission(permission)}
-                                                style={{ margin: 0, justifySelf: 'center' }}
-                                            />
-                                            <input
-                                                className='styled-checkbox'
-                                                type="checkbox"
-                                                checked={inversePermissions.includes(permission)}
-                                                onChange={() => toggleInversePermission(permission)}
-                                                style={{ margin: 0, justifySelf: 'center' }}
-                                            />
-                                            <div className='checkbox-label' style={{ overflowWrap: 'anywhere' }}>
-                                                {permission}
-                                            </div>
-                                        </React.Fragment>
-                                    ))}
-                                </div>
-                            </fieldset>
-
-                            <Dialog.Close asChild>
-                                <button className="Button SaveBtn" onClick={role == null ? create : edit}>Save</button>
-                            </Dialog.Close>
-                        </Dialog.Content>
+                                <input
+                                    type="checkbox"
+                                    className="is-deny"
+                                    aria-label={`Deny ${permissionLabel(perm)}`}
+                                    checked={inversePermissions.includes(perm)}
+                                    onChange={() => toggleInversePermission(perm)}
+                                />
+                            </div>
+                        ))}
                     </div>
-                </Dialog.Portal>
-            )}
-        </Dialog.Root>
+                ))}
+            </div>
+        </AdminFormDialog>
     ), setOpenExtra];
 };
 
@@ -226,23 +203,23 @@ const Roles: React.FC = () => {
     const canDelete = hasPermission(UserPermission.CAN_DELETE_ROLES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_ROLES);
 
-    const [data, setData] = React.useState<Role[]>([]);
-    const columns: (keyof Role)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof Role)[]).filter((key) => key !== 'id') : [];
-    const [currentPage, setCurrentPage] = useState(1);
+    const { data, currentPage, hasNext, loading, error, fetchPage, refresh: refreshPage } = usePagedList<Role>("roles", { params: { order_by: 'priority' } });
 
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll('roles', { limit: ITEMS_PER_PAGE, offset, order_by: 'priority' }).then((res) => {
-            setData(Array.isArray(res) ? (res as Role[]) : []);
-            setCurrentPage(page);
-        });
-    };
-
-    React.useEffect(() => {
-        fetchPage(1);
-    }, []);
-
-    const refreshPage = () => fetchPage(currentPage);
+    const columnDefs: ColumnDef<Role>[] = [
+        { key: 'name', label: 'Name', render: (r) => r.name },
+        { key: 'priority', label: 'Priority', render: (r) => String(r.priority) },
+        { key: 'display', label: 'Shown', render: (r) => formatCell(r.display_role) },
+        {
+            key: 'permissions',
+            label: 'Permissions',
+            render: (r) => {
+                const granted = r.permissions?.length ?? 0;
+                const denied = r.inverse_permissions?.length ?? 0;
+                return r.permissions?.includes(UserPermission.IS_SUPERUSER) ? 'Superuser' : `${granted} granted${denied ? `, ${denied} denied` : ''}`;
+            },
+            text: (r) => [...(r.permissions ?? []).map((p) => permissionLabel(p as UserPermission)), ...(r.inverse_permissions ?? []).map((p) => `No ${permissionLabel(p as UserPermission)}`)].join(', '),
+        },
+    ];
 
     const onDelete = (index_local: number, index_real: number) => {
         if (!canDelete) {
@@ -269,7 +246,10 @@ const Roles: React.FC = () => {
         <div className='tab-column-cover align-center'>
             <TableHead heading="Roles" type="roles" aemenu={ae} />
             <Table<Role>
-                columns={columns}
+                columnDefs={columnDefs}
+                loading={loading}
+                error={error}
+                hasNext={hasNext}
                 data={data}
                 onDelete={onDelete}
                 onEdit={onEdit}

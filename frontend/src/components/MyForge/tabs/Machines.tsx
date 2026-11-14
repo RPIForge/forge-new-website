@@ -1,10 +1,10 @@
-import React, { ReactNode, useEffect, useState } from 'react';
-import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE } from '../components/Table';
+import React, { useEffect, useState } from 'react';
+import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE, ColumnDef, formatCell, usePagedList } from '../components/Table';
 import { Machine, MachineGroup, MachineType } from 'src/interfaces';
 
 import '../styles/TabStyles.scss';
-import * as Dialog from '@radix-ui/react-dialog';
-import { Cross2Icon, PlusIcon } from '@radix-ui/react-icons';
+import { PlusIcon } from '@radix-ui/react-icons';
+import { AdminCheck, AdminField, AdminFormDialog, errorMessage } from '../../Admin/AdminForm';
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
@@ -17,145 +17,101 @@ interface aemenuprops {
     refresh: () => void;
 }
 
-const AEMenu: React.FC<aemenuprops> = ({ isDialogOpen, setIsDialogOpen, machine, setMachine, refresh,}) => {
+const AEMenu: React.FC<aemenuprops> = ({ isDialogOpen, setIsDialogOpen, machine, setMachine, refresh }) => {
     const { hasPermission } = useAuth();
     const canCreate = hasPermission(UserPermission.CAN_CREATE_MACHINES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_MACHINES);
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
-    
+
     const [name, setName] = useState("");
+    const [groupId, setGroupId] = useState("");
+    const [typeId, setTypeId] = useState("");
+    const [disabled, setDisabled] = useState(false);
+    const [maintenanceMode, setMaintenanceMode] = useState(false);
+    const [machineGroups, setMachineGroups] = useState<MachineGroup[] | null>(null);
+    const [machineTypes, setMachineTypes] = useState<MachineType[] | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
 
-    const [selectedMachineGroupId, setSelectedMachineGroupId] = useState<string>("_");
-    const [machineGroups, setMachineGroups] = useState<MachineGroup[]>([]);
-    React.useEffect(() => { OmniAPI.getAll("machinegroups").then(res => {setMachineGroups(res);} ); }, []);
-
-    const [selectedMachineTypeId, setSelectedMachineTypeId] = useState<string>("_");
-    const [machineTypes, setMachineTypes] = useState<MachineType[]>([]);
-    React.useEffect(() => { OmniAPI.getAll("machinetypes").then(res => {setMachineTypes(res);} ); }, []);
-
-    const [disabled, setDisabled] = useState<boolean>(false);
-    const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
+    // Only load the dropdown options once the form is actually opened
+    useEffect(() => {
+        if (!isDialogOpen) return;
+        if (machineGroups === null) OmniAPI.getEvery("machinegroups").then(setMachineGroups).catch(() => setMachineGroups([]));
+        if (machineTypes === null) OmniAPI.getEvery("machinetypes").then(setMachineTypes).catch(() => setMachineTypes([]));
+    }, [isDialogOpen]);
 
     useEffect(() => {
-        if (machine) {
-            setName(machine.name);
-            setSelectedMachineGroupId(machine.group_id);
-            setSelectedMachineTypeId(machine.type_id);
-            setDisabled(machine.disabled);
-            setMaintenanceMode(machine.maintenance_mode);
-        } else {
-            setName("");
-            setSelectedMachineGroupId("_");
-            setSelectedMachineTypeId("_");
-            setDisabled(false);
-            setMaintenanceMode(false);
-        }
-    }, [machine]);
+        setError("");
+        setName(machine?.name ?? "");
+        setGroupId(machine?.group_id ?? "");
+        setTypeId(machine?.type_id ?? "");
+        setDisabled(machine?.disabled ?? false);
+        setMaintenanceMode(machine?.maintenance_mode ?? false);
+    }, [machine, isDialogOpen]);
 
-    function create() {
-        if (name == "" || selectedMachineGroupId == "_" || selectedMachineTypeId == "_") {
-            alert("All fields must be populated!");
+    const save = async () => {
+        if (!name.trim() || !groupId || !typeId) {
+            setError("All fields must be filled in.");
             return;
         }
-        OmniAPI.create("machines", {name: name, group_id: selectedMachineGroupId, type_id: selectedMachineTypeId,}).then( () => {
+        setBusy(true);
+        setError("");
+        try {
+            if (machine) {
+                await OmniAPI.edit("machines", machine.id, { name: name.trim(), group_id: groupId, type_id: typeId, maintenance_mode: maintenanceMode, disabled });
+            } else {
+                await OmniAPI.create("machines", { name: name.trim(), group_id: groupId, type_id: typeId });
+            }
             refresh();
             setIsDialogOpen(false);
-        });
-    };
-
-    function edit() {
-        if (!machine || selectedMachineGroupId === "_" || selectedMachineTypeId === "_" ){
-            alert("Invalid machine state");
-            return;
+        } catch (err) {
+            setError(errorMessage(err, "Could not save the machine."));
+        } finally {
+            setBusy(false);
         }
-        OmniAPI.edit("machines", machine.id, {name: name, group_id: selectedMachineGroupId, type_id: selectedMachineTypeId, maintenance_mode: maintenanceMode, disabled: disabled,}).then( () => {
-            refresh();
-            setIsDialogOpen(false);
-        });
-    }
-    
-    const handleSelectMachineGroup = (id: string) => {
-        if (id === "_") {
-            return;
-        }
-        setSelectedMachineGroupId(id);
-    };
-    const handleSelectMachineType = (id: string) => {
-        if (id === "_") {
-            return;
-        }
-        setSelectedMachineTypeId(id);
     };
 
     if (!canSeeTables || (!canCreate && !canEdit)) return null;
     return (
-        <Dialog.Root open={isDialogOpen} onOpenChange={(open) => { if (!open) setMachine(null); setIsDialogOpen(open); }}>
-            {canCreate && (
-                <button className="addbtn" onClick={() => { setMachine(null); setIsDialogOpen(true); }}>
+        <AdminFormDialog
+            open={isDialogOpen}
+            onOpenChange={(open) => { if (!open) setMachine(null); setIsDialogOpen(open); }}
+            title={machine == null ? "Adding a Machine" : "Editing a Machine"}
+            onSubmit={save}
+            busy={busy}
+            error={error}
+            trigger={canCreate && (
+                <button className="addbtn" aria-label="Add a machine" onClick={() => { setMachine(null); setIsDialogOpen(true); }}>
                     <PlusIcon />
                 </button>
             )}
-            {(canCreate || canEdit) ? (
-                <Dialog.Portal>
-                    <div className='AEdiv'>
-                        <Dialog.Overlay className="DialogOverlay" />
-                        <Dialog.Content className="DialogContent" aria-describedby={undefined}>
-                            <Dialog.Close asChild>
-                                <button className="IconButton" aria-label="Close">
-                                    <Cross2Icon />
-                                </button>
-                            </Dialog.Close>
-                            <Dialog.Title className="DialogTitle">{machine == null ? "Adding" : "Editing"} Machine</Dialog.Title>
-                            <fieldset className="Fieldset">
-                                <label className="Label" htmlFor="name">Name</label>
-                                <input className="Input" id="name" value={name} onChange={e => setName(e.target.value)} maxLength={100} />
-
-                                <label className="Label" htmlFor="machineGroup">Machine Group</label>
-                                <select
-                                    className='styled-dropdown'
-                                    value={selectedMachineGroupId}
-                                    onChange={(e) => handleSelectMachineGroup(e.target.value)}
-                                    required
-                                >
-                                    <option className='styled-dropdown-placeholder' hidden>Select Machine Group</option>
-                                    {machineGroups.map((machineGroup: MachineGroup) => (
-                                        <option className='styled-dropdown-option' key={machineGroup.id} value={machineGroup.id}>{machineGroup.name}</option>
-                                    ))}
-                                </select>
-
-                                <label className="Label" htmlFor="machineType">Machine Type</label>
-                                <select
-                                    className='styled-dropdown'
-                                    value={selectedMachineTypeId}
-                                    onChange={(e) => handleSelectMachineType(e.target.value)}
-                                    required
-                                >
-                                    <option className='styled-dropdown-placeholder' value="_" hidden>Select Machine Type</option>
-                                    {machineTypes.map((machineType: MachineType) => (
-                                        <option className='styled-dropdown-option' key={machineType.id} value={machineType.id}>{machineType.name}</option>
-                                    ))}
-                                </select>
-
-                                {machine != null ? <>
-                                <div className="checkbox-row">
-                                    <div className="checkbox-labels">
-                                        <label className="Label" htmlFor="maintenance">Maintenance Mode</label>
-                                        <input className="Checkbox" type="checkbox" id="maintenance" checked={maintenanceMode} onChange={(e) => setMaintenanceMode(e.target.checked)} />
-                                    </div>
-                                    <div className="checkbox-labels">
-                                        <label className="Label" htmlFor="disabled">Disabled</label>
-                                        <input className="Checkbox" type="checkbox" id="disabled" checked={disabled} onChange={(e) => setDisabled(e.target.checked)} />
-                                    </div>
-                                </div>
-                                </> : null}
-
-                            </fieldset>
-                            <button className="Button SaveBtn" onClick={machine == null ? create : edit}>Save</button>
-                        </Dialog.Content>
-                    </div>
-                </Dialog.Portal>
-            ) : null}
-        </Dialog.Root>
+        >
+            <AdminField label="Machine Name" htmlFor="machine-name">
+                <input id="machine-name" value={name} onChange={e => setName(e.target.value)} maxLength={100} required />
+            </AdminField>
+            <AdminField label="Machine Group" htmlFor="machine-group">
+                <select id="machine-group" value={groupId} onChange={(e) => setGroupId(e.target.value)} required>
+                    <option value="" disabled>{machineGroups === null ? "Loading…" : "Select a group"}</option>
+                    {(machineGroups ?? []).map((group) => (
+                        <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
+                </select>
+            </AdminField>
+            <AdminField label="Machine Type" htmlFor="machine-type">
+                <select id="machine-type" value={typeId} onChange={(e) => setTypeId(e.target.value)} required>
+                    <option value="" disabled>{machineTypes === null ? "Loading…" : "Select a type"}</option>
+                    {(machineTypes ?? []).map((type) => (
+                        <option key={type.id} value={type.id}>{type.name}</option>
+                    ))}
+                </select>
+            </AdminField>
+            {machine != null && (
+                <>
+                    <AdminCheck id="machine-maintenance" label="Maintenance Mode" checked={maintenanceMode} onChange={setMaintenanceMode} />
+                    <AdminCheck id="machine-disabled" label="Disabled" checked={disabled} onChange={setDisabled} />
+                </>
+            )}
+        </AdminFormDialog>
     );
 };
 
@@ -165,23 +121,18 @@ const Machines: React.FC = () => {
     const canDelete = hasPermission(UserPermission.CAN_DELETE_MACHINES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_MACHINES);
 
-    const [data, setData] = React.useState<Machine[]>([]);
-    const columns: (keyof Machine)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof Machine)[]).filter((key) => !key.includes('_id') && key !== 'id') : [];
-    const [currentPage, setCurrentPage] = useState(1);
+    const { data, currentPage, hasNext, loading, error, fetchPage, refresh: refreshPage } = usePagedList<Machine>("machines");
 
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll("machines", { limit: ITEMS_PER_PAGE, offset }).then( (data) => {
-            setData(data);
-            setCurrentPage(page);
-        });
-    };
-
-    React.useEffect(() => {
-        fetchPage(1);
-    }, []);
-
-    const refreshPage = () => fetchPage(currentPage);
+    const columnDefs: ColumnDef<Machine>[] = [
+        { key: 'name', label: 'Name', render: (m) => m.name },
+        { key: 'group', label: 'Group', render: (m) => formatCell(m.group_name) },
+        { key: 'type', label: 'Type', render: (m) => formatCell(m.type_name) },
+        {
+            key: 'status',
+            label: 'Status',
+            render: (m) => m.disabled ? 'Disabled' : m.maintenance_mode ? 'Maintenance' : (m as any).active_usage_id ? 'In Use' : 'Available',
+        },
+    ];
 
     const onDelete = (index_local: number, index_real: number) => {
         if (!canDelete) {
@@ -219,7 +170,10 @@ const Machines: React.FC = () => {
                 }
             />
             <Table<Machine>
-                columns={columns}
+                columnDefs={columnDefs}
+                loading={loading}
+                error={error}
+                hasNext={hasNext}
                 data={data}
                 onDelete={onDelete}
                 onEdit={onEdit}

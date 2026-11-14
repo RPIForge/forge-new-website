@@ -1,12 +1,12 @@
 import React, { ReactNode } from 'react';
-import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE } from '../components/Table';
+import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE, ColumnDef, formatCell, usePagedList } from '../components/Table';
 import { OmniAPI } from "src/apis/OmniAPI";
 import { Resource, ResourceSlot } from 'src/interfaces';
 
 import '../styles/TabStyles.scss';
 
-import {Cross2Icon, PlusIcon} from "@radix-ui/react-icons";
-import * as Dialog from '@radix-ui/react-dialog';
+import { PlusIcon } from "@radix-ui/react-icons";
+import { AdminCheck, AdminCheckList, AdminField, AdminFormDialog, AdminFormHeading, errorMessage } from '../../Admin/AdminForm';
 import { useState } from 'react';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
@@ -20,170 +20,123 @@ interface aemenuprops {
     refresh: () => void;
 }
 
+const resourceLabel = (r: Resource) => {
+    const extra = [r.brand, r.color].filter(Boolean).join(' ');
+    return extra ? `${r.name} (${extra})` : r.name;
+};
+
 const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, rslot: ResourceSlot | null) => void] => {
-    let { isDialogOpen, setIsDialogOpen, resourceSlot, setResourceSlot, refresh} = props;
-    
+    const { isDialogOpen, setIsDialogOpen, resourceSlot, setResourceSlot, refresh } = props;
+
     const { hasPermission } = useAuth();
     const canCreate = hasPermission(UserPermission.CAN_CREATE_RESOURCE_SLOTS);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_RESOURCE_SLOTS);
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
 
     const [name, setName] = useState("");
-    const [resources, setResources] = useState<Resource[]>([]);
-    React.useEffect(() => {
-            OmniAPI.getAll("resources")
-                .then((data) => {
-                    if (Array.isArray(data) && data.every(item => 'id' in item && 'name' in item)) {
-                        setResources(data);
-                    } else {
-                        throw new Error('Data is not of type Resource');
-                    }
-                })
-                .catch((error) => {
-                    console.error('Error fetching resources:', error);
-                });
-        }, []);
+    const [resources, setResources] = useState<Resource[] | null>(null);
     const [resourceIDS, setResourceIDS] = useState<string[]>([]);
     const [useown, setUseown] = useState(false);
     const [canempty, setCanempty] = useState(false);
-    const handleCheckboxChange = (value: string) => {
-        setResourceIDS(prev =>
-            prev.includes(value)
-            ? prev.filter(item => item !== value) // remove
-            : [...prev, value] // add
-        );
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+
+    // Only load the resource list once the form is actually opened
+    React.useEffect(() => {
+        if (!isDialogOpen || resources !== null) return;
+        OmniAPI.getEvery("resources").then(setResources).catch(() => setResources([]));
+    }, [isDialogOpen]);
+
+    const toggleResource = (id: string) => {
+        setResourceIDS(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
     };
 
-    function setOpenExtra (state: boolean, rslot: ResourceSlot | null) {
+    function setOpenExtra(state: boolean, rslot: ResourceSlot | null) {
+        setError("");
         setResourceSlot(rslot);
+        if (!state) {
+            setIsDialogOpen(false);
+            return;
+        }
         if (rslot != null) {
             setName(rslot.display_name);
             OmniAPI.get("resourceslots", rslot.id).then((r: ResourceSlot) => {
-                setResourceIDS(r.valid_resource_ids);
+                setResourceIDS(r.valid_resource_ids ?? []);
                 setCanempty(r.allow_empty);
                 setUseown(r.allow_own_material);
-                setIsDialogOpen(state);
+                setIsDialogOpen(true);
             });
         } else {
             setName("");
             setResourceIDS([]);
             setCanempty(false);
             setUseown(false);
-            setIsDialogOpen(state);
+            setIsDialogOpen(true);
         }
     }
 
-    function create() {
-        if (!canCreate) {
-            alert("You do not have the permissions to create resource slots");
+    const save = async () => {
+        if (resourceSlot == null ? !canCreate : !canEdit) {
+            setError("You do not have the permissions to do this.");
             return;
         }
-        if (!name || !resourceIDS) {
-            alert("All fields must be populated!");
+        if (!name.trim()) {
+            setError("Slot name must be filled in.");
             return;
         }
-
-        OmniAPI.create("resourceslots", {
-            db_name: name,
-            display_name: name,
-            allow_empty: canempty,
-            allow_own_material: useown,
-            resource_ids: resources
-                .filter(r => resourceIDS.includes(r.id))
-                .map(r => r.id)
-        }).then(() => {
+        setBusy(true);
+        setError("");
+        try {
+            const body = {
+                db_name: name.trim(),
+                display_name: name.trim(),
+                resource_ids: resourceIDS,
+                allow_empty: canempty,
+                allow_own_material: useown,
+            };
+            if (resourceSlot) await OmniAPI.edit("resourceslots", resourceSlot.id, body);
+            else await OmniAPI.create("resourceslots", body);
             refresh();
             setOpenExtra(false, null);
-        });
-    }
-
-    function edit() {
-        if (!canEdit) {
-            alert("You do not have the permissions to edit resource slots");
-            return;
+        } catch (err) {
+            setError(errorMessage(err, "Could not save the resource slot."));
+        } finally {
+            setBusy(false);
         }
-        if (!resourceSlot) return;
-        if (!name || !resourceIDS) {
-            alert("All fields must be populated!");
-            return;
-        }
+    };
 
-        OmniAPI.edit("resourceslots", resourceSlot.id, {
-            db_name: name,
-            display_name: name,
-            resource_ids: resourceIDS,
-            allow_empty: canempty,
-            allow_own_material: useown
-        }).then(() => {
-            refresh();
-            setOpenExtra(false, null);
-        });
-    }
-    
     if (!canSeeTables || (!canCreate && !canEdit)) return [<></>, () => {}];
     return [(
-        <Dialog.Root open={isDialogOpen} onOpenChange={(e: boolean) => { setOpenExtra(e, resourceSlot); }}>
-            {canCreate && (
-                <button className="addbtn" onClick={() => { setOpenExtra(true, null); }}><PlusIcon /></button>
+        <AdminFormDialog
+            open={isDialogOpen}
+            onOpenChange={(open) => setOpenExtra(open, resourceSlot)}
+            title={resourceSlot == null ? "Adding a Resource Slot" : "Editing a Resource Slot"}
+            onSubmit={save}
+            busy={busy}
+            error={error}
+            trigger={canCreate && (
+                <button className="addbtn" aria-label="Add a resource slot" onClick={() => setOpenExtra(true, null)}><PlusIcon /></button>
             )}
-            {(canCreate || canEdit) && (
-                <Dialog.Portal>
-                    <div className='AEdiv'>
-                        <Dialog.Overlay className="DialogOverlay" />
-                        <Dialog.Content className="DialogContent">
-                            <Dialog.Close asChild>
-                                <button className="IconButton" aria-label="Close">
-                                    <Cross2Icon />
-                                </button>
-                            </Dialog.Close>
-                            <Dialog.Title className="DialogTitle">{resourceSlot == null ? "Adding" : "Editing"} Resource Slot</Dialog.Title>
-
-                            <fieldset className="Fieldset">
-                                <label className="Label" htmlFor="name"><div>Name</div></label>
-                                <input className="Input" id="name" value={name} onChange={e => setName(e.target.value)} maxLength={100}/>
-
-                                <label className="Label" htmlFor="resources">Resources</label>
-                                {resources.map((resource: Resource) => (
-                                    <div className="checkbox-labels" key={resource.id}>
-                                        <input
-                                            className='styled-checkbox'
-                                            type="checkbox"
-                                            checked={resourceIDS ? resourceIDS.includes(resource.id) : false}
-                                            onChange={() => handleCheckboxChange(resource.id)}
-                                        />
-                                        <label className='checkbox-label'>
-                                            {resource.name}
-                                        </label>
-                                    </div>
-                                ))}
-
-                                <label className="Label" htmlFor="useown"><div>Allow using own material?</div></label>
-                                <input
-                                    className="styled-checkbox"
-                                    id="useown"
-                                    type="checkbox"
-                                    checked={useown}
-                                    onChange={e => setUseown(e.target.checked)}
-                                />
-
-                                <label className="Label" htmlFor="canempty"><div>Allow empty?</div></label>
-                                <input
-                                    className="styled-checkbox"
-                                    id="canempty"
-                                    type="checkbox"
-                                    checked={canempty}
-                                    onChange={e => setCanempty(e.target.checked)}
-                                />
-                            </fieldset>
-                            
-                            <Dialog.Close asChild>
-                                <button className="Button SaveBtn" onClick={resourceSlot == null ? create : edit}>Save</button>
-                            </Dialog.Close>
-                        </Dialog.Content>
-                    </div>
-                </Dialog.Portal>
-            )}
-        </Dialog.Root>
+        >
+            <AdminField label="Slot Name" htmlFor="slot-name">
+                <input id="slot-name" value={name} onChange={e => setName(e.target.value)} maxLength={100} required />
+            </AdminField>
+            <AdminFormHeading>Resources</AdminFormHeading>
+            <AdminCheckList empty={resources === null ? "Loading…" : "No resources yet."}>
+                {(resources ?? []).map((resource) => (
+                    <AdminCheck
+                        key={resource.id}
+                        id={`slot-resource-${resource.id}`}
+                        label={resourceLabel(resource)}
+                        checked={resourceIDS.includes(resource.id)}
+                        onChange={() => toggleResource(resource.id)}
+                    />
+                ))}
+            </AdminCheckList>
+            <AdminFormHeading>Restrictions</AdminFormHeading>
+            <AdminCheck id="slot-allow-empty" label="Allow empty" checked={canempty} onChange={setCanempty} />
+            <AdminCheck id="slot-allow-own" label="Allow own material" checked={useown} onChange={setUseown} />
+        </AdminFormDialog>
     ), setOpenExtra];
 }
 
@@ -192,23 +145,17 @@ const ResourceSlots: React.FC = () => {
     const canDelete = hasPermission(UserPermission.CAN_DELETE_RESOURCE_SLOTS);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_RESOURCE_SLOTS);
 
-    const [data, setData] = React.useState<ResourceSlot[]>([]);
-    const columns: (keyof ResourceSlot)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof ResourceSlot)[]).filter((key) => !key.includes('db_name') && !(key == 'name') && !key.includes('id') && !key.includes('valid_resource_ids')) : [];
-    const [currentPage, setCurrentPage] = useState(1);
+    const { data, currentPage, hasNext, loading, error, fetchPage, refresh: refreshPage } = usePagedList<ResourceSlot>("resourceslots");
 
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll("resourceslots", { limit: ITEMS_PER_PAGE, offset }).then( (data) => {
-            setData(data);
-            setCurrentPage(page);
-        });
-    };
-
-    React.useEffect(() => {
-        fetchPage(1);
-    }, []);
-
-    const refreshPage = () => fetchPage(currentPage);
+    const columnDefs: ColumnDef<ResourceSlot>[] = [
+        { key: 'name', label: 'Name', render: (r) => r.display_name },
+        { key: 'resources', label: 'Resources', render: (r) => formatCell(r.resource_names) },
+        {
+            key: 'allows',
+            label: 'Allows',
+            render: (r) => [r.allow_empty && 'Empty', r.allow_own_material && 'Own material'].filter(Boolean).join(', ') || '—',
+        },
+    ];
 
     const onDelete = (index_local: number) => {
         if (!canDelete) {
@@ -230,7 +177,10 @@ const ResourceSlots: React.FC = () => {
                 aemenu={ae}
             />
             <Table<ResourceSlot>
-                columns={columns}
+                columnDefs={columnDefs}
+                loading={loading}
+                error={error}
+                hasNext={hasNext}
                 data={data}
                 onDelete={onDelete}
                 onEdit={(e) => setOpen(true, e)}

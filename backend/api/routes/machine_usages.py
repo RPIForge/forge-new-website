@@ -45,7 +45,7 @@ async def get_my_usages(
         await session.scalars(
             select(MachineUsage)
             .join(MachineUsage.machine)
-            .options(selectinload(MachineUsage.machine))
+            .options(selectinload(MachineUsage.machine).selectinload(Machine.type))
             .options(selectinload(MachineUsage.semester))
             .where(MachineUsage.user_id == current_user.id)
             .order_by(order_determinant)
@@ -57,6 +57,7 @@ async def get_my_usages(
     return [
         UsageResponse(
             machine_name=usage.machine.name,
+            machine_type_name=usage.machine.type.name if usage.machine.type else None,
             semester=f"{usage.semester.semester_type} {usage.semester.calendar_year}" if usage.semester else None,
             time_started=usage.time_started,
             duration=usage.duration_seconds,
@@ -81,7 +82,7 @@ async def get_my_usages(
         await session.scalars(
             select(MachineUsage)
             .join(MachineUsage.machine)
-            .options(selectinload(MachineUsage.machine))
+            .options(selectinload(MachineUsage.machine).selectinload(Machine.type))
             .options(selectinload(MachineUsage.semester))
             .where(MachineUsage.user_id == current_user.id)
             .where(Machine.active_usage)
@@ -91,6 +92,7 @@ async def get_my_usages(
     return [
         UsageResponse(
             machine_name=usage.machine.name,
+            machine_type_name=usage.machine.type.name if usage.machine.type else None,
             semester=f"{usage.semester.semester_type} {usage.semester.calendar_year}" if usage.semester else None,
             time_started=usage.time_started,
             duration=usage.duration_seconds,

@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { useState } from 'react';
-import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE } from '../components/Table';
+import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE, ColumnDef, formatCell, usePagedList } from '../components/Table';
 import { Resource } from 'src/interfaces';
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { UserPermission } from 'src/enums';
@@ -9,8 +9,8 @@ import useAuth from '../../Auth/useAuth';
 import '../styles/TabStyles.scss';
 
 
-import {Cross2Icon, PlusIcon} from "@radix-ui/react-icons";
-import * as Dialog from '@radix-ui/react-dialog';
+import { PlusIcon } from "@radix-ui/react-icons";
+import { AdminField, AdminFormDialog, errorMessage } from '../../Admin/AdminForm';
 
 interface aemenuprops {
     isDialogOpen: boolean;
@@ -20,9 +20,9 @@ interface aemenuprops {
     refresh: () => void;
 }
 
-const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource | null) => void] =>  {
-    let { isDialogOpen, setIsDialogOpen, resource, setResource, refresh} = props;
-    
+const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource | null) => void] => {
+    const { isDialogOpen, setIsDialogOpen, resource, setResource, refresh } = props;
+
     const { hasPermission } = useAuth();
     const canCreate = hasPermission(UserPermission.CAN_CREATE_RESOURCES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_RESOURCES);
@@ -32,100 +32,83 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
     const [brand, setBrand] = useState("");
     const [color, setColor] = useState("");
     const [units, setUnits] = useState("");
-    const [cost, setCost] = useState(0);
+    const [cost, setCost] = useState<number | "">(0);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
 
     const setOpenExtra = (state: boolean, res: Resource | null) => {
-            setResource(res);
-            if (res != null) {
-                console.log("resource not null");
-                setName(res.name);
-                setBrand(res.brand?res.brand:"");
-                setColor(res.color?res.color:"");
-                setUnits(res.units?res.units:"");
-                setCost(res.cost?res.cost:0);
-            } else {
-                console.log("resource is null");
-                setName("");
-                setBrand("");
-                setColor("");
-                setUnits("");
-                setCost(0);
-            }
-            if (isDialogOpen != state) setIsDialogOpen(state);
-        };
-
-    function create() {
-        if (!canCreate) {
-            alert("You do not have the permissions to create resources");
-            return;
-        }
-        if (name == "" || brand == "" || color == "" || units == "") {
-            alert("All fields must be populated!");
-            return;
-        }
-        OmniAPI.create("resources", {name: name, brand: brand, color: color, units: units, cost: cost})
-        .then( () => {
-            refresh();
-            setOpenExtra(false, null);
-        });
+        setError("");
+        setResource(res);
+        setName(res?.name ?? "");
+        setBrand(res?.brand ?? "");
+        setColor(res?.color ?? "");
+        setUnits(res?.units ?? "");
+        setCost(res?.cost != null ? Number(res.cost) : 0);
+        if (isDialogOpen != state) setIsDialogOpen(state);
     };
-    
-    function edit() {
-        if (!canEdit) {
-            alert("You do not have the permissions to edit resources");
+
+    const save = async () => {
+        if (resource == null ? !canCreate : !canEdit) {
+            setError("You do not have the permissions to do this.");
             return;
         }
-        if (resource == null) {return}
-        OmniAPI.edit("resources", resource.id, {name: name, brand: brand, color: color, units: units, cost: cost})
-        .then( () => {
+        if (!name.trim() || !brand.trim() || !color.trim() || !units.trim() || cost === "") {
+            setError("All fields must be filled in.");
+            return;
+        }
+        setBusy(true);
+        setError("");
+        try {
+            const body = { name: name.trim(), brand: brand.trim(), color: color.trim(), units: units.trim(), cost };
+            if (resource) await OmniAPI.edit("resources", resource.id, body);
+            else await OmniAPI.create("resources", body);
             refresh();
             setOpenExtra(false, null);
-        });
-    }
+        } catch (err) {
+            setError(errorMessage(err, "Could not save the resource."));
+        } finally {
+            setBusy(false);
+        }
+    };
 
     if (!canSeeTables || (!canCreate && !canEdit)) return [null, () => {}];
     return [(
-        <Dialog.Root open={isDialogOpen} onOpenChange={(e: boolean) => { setOpenExtra(e, resource); }}>
-            {canCreate && (
-                <button className="addbtn" onClick={() => { setOpenExtra(true, null); }}><PlusIcon /></button>
+        <AdminFormDialog
+            open={isDialogOpen}
+            onOpenChange={(open) => setOpenExtra(open, resource)}
+            title={resource == null ? "Adding a Resource" : "Editing a Resource"}
+            onSubmit={save}
+            busy={busy}
+            error={error}
+            trigger={canCreate && (
+                <button className="addbtn" aria-label="Add a resource" onClick={() => setOpenExtra(true, null)}><PlusIcon /></button>
             )}
-            {(canCreate || canEdit) && (
-                <Dialog.Portal>
-                    <div className='AEdiv'>
-                        <Dialog.Overlay className="DialogOverlay" />
-                        <Dialog.Content className="DialogContent">
-                            <Dialog.Close asChild>
-                                <button className="IconButton" aria-label="Close">
-                                    <Cross2Icon />
-                                </button>
-                            </Dialog.Close>
-                            <Dialog.Title className="DialogTitle">{resource == null ? "Adding" : "Editing"} Resource</Dialog.Title>
-
-                            <fieldset className="Fieldset">
-                                <label className="Label" htmlFor="name">Name</label>
-                                <input className="Input" id="name" value={name} onChange={e => setName(e.target.value)} maxLength={100}/>
-
-                                <label className="Label" htmlFor="brand">Brand</label>
-                                <input className="Input" id="brand" value={brand} onChange={e => setBrand(e.target.value)} maxLength={100}/>
-
-                                <label className="Label" htmlFor="color">Color</label>
-                                <input className="Input" id="color" value={color} onChange={e => setColor(e.target.value)} maxLength={100}/>
-
-                                <label className="Label" htmlFor="units">Units</label>
-                                <input className="Input" id="units" value={units} onChange={e => setUnits(e.target.value)} maxLength={16}/>
-
-                                <label className="Label" htmlFor="cost">Cost</label>
-                                <input className="Input" id="cost" type='number' value={cost} min={0} onChange={e => setCost(Math.max(0, Number(e.target.value) || 0))}/>
-                            </fieldset>
-                            
-                            <Dialog.Close asChild>
-                                <button className="Button SaveBtn" onClick={resource == null ? create : edit}>Save</button>
-                            </Dialog.Close>
-                        </Dialog.Content>
-                    </div>
-                </Dialog.Portal>
-            )}
-        </Dialog.Root>
+        >
+            <AdminField label="Resource Name" htmlFor="resource-name">
+                <input id="resource-name" value={name} onChange={e => setName(e.target.value)} maxLength={100} required />
+            </AdminField>
+            <AdminField label="Resource Brand" htmlFor="resource-brand">
+                <input id="resource-brand" value={brand} onChange={e => setBrand(e.target.value)} maxLength={100} required />
+            </AdminField>
+            <AdminField label="Resource Color" htmlFor="resource-color">
+                <input id="resource-color" value={color} onChange={e => setColor(e.target.value)} maxLength={100} required />
+            </AdminField>
+            <AdminField label="Resource Units" htmlFor="resource-units">
+                <input id="resource-units" value={units} onChange={e => setUnits(e.target.value)} maxLength={16} placeholder="e.g. g" required />
+            </AdminField>
+            <AdminField label="Resource Cost" htmlFor="resource-cost">
+                <input
+                    id="resource-cost"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={cost}
+                    onChange={e => setCost(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                    required
+                />
+            </AdminField>
+        </AdminFormDialog>
     ), setOpenExtra];
 }
 
@@ -135,23 +118,14 @@ const Resources: React.FC = () => {
     const canDelete = hasPermission(UserPermission.CAN_DELETE_RESOURCES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_RESOURCES);
 
-    const [data, setData] = React.useState<Resource[]>([]);
-    const columns: (keyof Resource)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof Resource)[]).filter((key) => !key.includes('_id') && key !== 'id') : [];
-    const [currentPage, setCurrentPage] = useState(1);
+    const { data, currentPage, hasNext, loading, error, fetchPage, refresh: refreshPage } = usePagedList<Resource>("resources");
 
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll("resources", { limit: ITEMS_PER_PAGE, offset }).then( (data) => {
-            setData(data);
-            setCurrentPage(page);
-        });
-    };
-
-    React.useEffect(() => {
-        fetchPage(1);
-    }, []);
-
-    const refreshPage = () => fetchPage(currentPage);
+    const columnDefs: ColumnDef<Resource>[] = [
+        { key: 'name', label: 'Name', render: (r) => r.name },
+        { key: 'brand', label: 'Brand', render: (r) => formatCell(r.brand) },
+        { key: 'color', label: 'Color', render: (r) => formatCell(r.color) },
+        { key: 'cost', label: 'Cost', render: (r) => `$${Number(r.cost).toFixed(2)} / ${r.units || 'unit'}` },
+    ];
 
     const onDelete = (index_local: number, index_real: number) => {
         if (!canDelete) {
@@ -173,7 +147,10 @@ const Resources: React.FC = () => {
                 aemenu={ae}
             />
             <Table<Resource>
-                columns={columns}
+                columnDefs={columnDefs}
+                loading={loading}
+                error={error}
+                hasNext={hasNext}
                 data={data}
                 onDelete={onDelete}
                 onEdit={(e) => { setOpen(true, e);}}

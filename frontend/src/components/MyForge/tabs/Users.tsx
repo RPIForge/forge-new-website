@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { OmniAPI } from 'src/apis/OmniAPI';
-import Table, { DeleteItem, ITEMS_PER_PAGE, TableHead } from '../components/Table';
+import Table, { ColumnDef, DeleteItem, TableHead, formatCell, usePagedList } from '../components/Table';
 import { User } from 'src/interfaces';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
@@ -14,24 +14,37 @@ const Users: React.FC = () => {
     const canSeeUsers = hasPermission(UserPermission.CAN_SEE_USERS);
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
 
-    const [data, setData] = React.useState<User[]>([]);
-    //change this to fix gender id
-    const columns: (keyof User)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof User)[]).filter((key) => !key.includes('_id') && key !== 'id') : [];
-    const [currentPage, setCurrentPage] = useState(1);
+    const { data, currentPage, hasNext, loading, error, fetchPage, refresh: refreshPage } = usePagedList<User>('users', {
+        enabled: canSeeTables && canSeeUsers,
+    });
 
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll('users', { limit: ITEMS_PER_PAGE, offset }).then((res) => {
-            setData(Array.isArray(res) ? res : []);
-            setCurrentPage(page);
-        });
-    };
-
-    React.useEffect(() => {
-        fetchPage(1);
-    }, []);
-
-    const refreshPage = () => fetchPage(currentPage);
+    // A few combined columns instead of every field, so the table fits without scrolling
+    const columnDefs: ColumnDef<User>[] = [
+        {
+            key: 'name',
+            label: 'Name',
+            render: (u) => (
+                <span className="cell-stack">
+                    <strong>{u.first_name} {u.last_name}</strong>
+                    <small>{u.RCSID}</small>
+                </span>
+            ),
+            text: (u) => `${u.first_name} ${u.last_name} (${u.RCSID})`,
+        },
+        { key: 'rin', label: 'RIN', render: (u) => u.RIN },
+        { key: 'major', label: 'Major', render: (u) => formatCell(u.major) },
+        { key: 'role', label: 'Role', render: (u) => formatCell(u.display_role) },
+        { key: 'balance', label: 'Balance', render: (u) => `$${Number(u.semester_balance ?? 0).toFixed(2)}` },
+        {
+            key: 'status',
+            label: 'Status',
+            render: (u) => [
+                u.is_email_verified ? 'Verified' : 'Unverified',
+                u.is_graduating && 'Graduating',
+                u.is_rpi_staff && 'Staff',
+            ].filter(Boolean).join(' · '),
+        },
+    ];
 
     const onDelete = (index_local: number, index_real: number) => {
         DeleteItem('users', data[index_real], refreshPage);
@@ -44,7 +57,10 @@ const Users: React.FC = () => {
                 heading="Users"
             />
             <Table<User>
-                columns={columns}
+                columnDefs={columnDefs}
+                loading={loading}
+                error={error}
+                hasNext={hasNext}
                 data={data}
                 currentPage={currentPage}
                 onPageChange={fetchPage}

@@ -1,13 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { Cross2Icon } from '@radix-ui/react-icons';
+import { AdminField, AdminFormDialog } from '../AdminForm';
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { Semester } from 'src/interfaces';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
 import editIcon from '../../../assets/img/icon-edit.svg?url';
 import deleteIcon from '../../../assets/img/icon-delete.svg?url';
-import dividerLine from '../../../assets/img/auth-divider.svg?url';
 
 const SEASONS = ['Fall', 'Spring', 'Summer'];
 
@@ -202,80 +200,54 @@ const SemestersAdmin: React.FC = () => {
                 </div>
             )}
 
-            <Dialog.Root open={dialog !== null} onOpenChange={(open) => { if (!open) close(); }}>
-                <Dialog.Portal>
-                    <Dialog.Overlay className="admin-dialog-overlay" />
-                    <Dialog.Content className="admin-dialog" aria-describedby={undefined}>
-                        <Dialog.Close asChild>
-                            <button type="button" className="admin-dialog__close" aria-label="Close"><Cross2Icon /></button>
-                        </Dialog.Close>
+            <AdminFormDialog
+                open={dialog === 'add' || dialog === 'edit'}
+                onOpenChange={(open) => { if (!open) close(); }}
+                title={dialog === 'edit' ? 'Editing a Semester' : 'Adding a Semester'}
+                onSubmit={save}
+                busy={busy}
+                error={formError}
+            >
+                <AdminField label="Season" htmlFor="semester-season">
+                    <select id="semester-season" value={season} onChange={(e) => setSeason(Number(e.target.value))}>
+                        {SEASONS.map((label, index) => <option key={label} value={index}>{label}</option>)}
+                    </select>
+                </AdminField>
+                <AdminField label="Calendar Year" htmlFor="semester-year">
+                    <input id="semester-year" type="number" inputMode="numeric" min={2020} max={9999} value={year} onChange={(e) => setYear(e.target.value)} required />
+                </AdminField>
+            </AdminFormDialog>
 
-                        {(dialog === 'add' || dialog === 'edit') && (
-                            <>
-                                <Dialog.Title className="admin-dialog__title">{dialog === 'add' ? 'Adding a Semester' : 'Editing a Semester'}</Dialog.Title>
-                                <img className="admin-dialog__divider" src={dividerLine} alt="" aria-hidden="true" />
-                                <div className="admin-dialog__field">
-                                    <label htmlFor="semester-season">Season</label>
-                                    <select id="semester-season" value={season} onChange={(e) => setSeason(Number(e.target.value))}>
-                                        {SEASONS.map((label, index) => <option key={label} value={index}>{label}</option>)}
-                                    </select>
-                                </div>
-                                <div className="admin-dialog__field">
-                                    <label htmlFor="semester-year">Calendar Year</label>
-                                    <input id="semester-year" type="number" inputMode="numeric" min={2020} max={9999} value={year} onChange={(e) => setYear(e.target.value)} />
-                                </div>
-                                {formError && <p className="admin-dialog__error" role="alert">{formError}</p>}
-                                <div className="admin-dialog__actions">
-                                    <button type="button" className="admin-btn" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-                                </div>
-                            </>
-                        )}
+            <AdminFormDialog
+                open={dialog === 'advance'}
+                onOpenChange={(open) => { if (!open) close(); }}
+                title="Advance Semester?"
+                submitLabel="Advance"
+                onSubmit={() => run(() => OmniAPI.exec('next_semester'), 'Could not advance the semester')}
+                busy={busy}
+                error={formError}
+            >
+                <p className="admin-form__text">
+                    This moves the site from <strong>{semesterName(current)}</strong> to the next semester. New machine usages will be charged to the new semester. This can’t be undone.
+                </p>
+            </AdminFormDialog>
 
-                        {dialog === 'advance' && (
-                            <>
-                                <Dialog.Title className="admin-dialog__title">Advance Semester?</Dialog.Title>
-                                <img className="admin-dialog__divider" src={dividerLine} alt="" aria-hidden="true" />
-                                <p className="admin-dialog__text">
-                                    This moves the site from <strong>{semesterName(current)}</strong> to the next semester. New machine usages will be charged to the new semester. This can’t be undone.
-                                </p>
-                                {formError && <p className="admin-dialog__error" role="alert">{formError}</p>}
-                                <div className="admin-dialog__actions">
-                                    <button type="button" className="admin-btn admin-btn--outline" onClick={close}>Cancel</button>
-                                    <button type="button" className="admin-btn" disabled={busy} onClick={() => run(() => OmniAPI.exec('next_semester'), 'Could not advance the semester')}>
-                                        {busy ? 'Advancing…' : 'Advance'}
-                                    </button>
-                                </div>
-                            </>
-                        )}
-
-                        {dialog === 'set' && (
-                            <>
-                                <Dialog.Title className="admin-dialog__title">Set Current Semester</Dialog.Title>
-                                <img className="admin-dialog__divider" src={dividerLine} alt="" aria-hidden="true" />
-                                <div className="admin-dialog__field">
-                                    <label htmlFor="semester-target">Semester</label>
-                                    <select id="semester-target" value={targetId} onChange={(e) => setTargetId(e.target.value)}>
-                                        <option value="" disabled>Select a semester</option>
-                                        {sorted.map((s) => <option key={s.id} value={s.id}>{semesterName(s)}</option>)}
-                                    </select>
-                                </div>
-                                {formError && <p className="admin-dialog__error" role="alert">{formError}</p>}
-                                <div className="admin-dialog__actions">
-                                    <button type="button" className="admin-btn admin-btn--outline" onClick={close}>Cancel</button>
-                                    <button
-                                        type="button"
-                                        className="admin-btn"
-                                        disabled={busy || !targetId}
-                                        onClick={() => run(() => OmniAPI.exec('set_semester', { semester_id: targetId }), 'Could not set the semester')}
-                                    >
-                                        {busy ? 'Saving…' : 'Set Current'}
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </Dialog.Content>
-                </Dialog.Portal>
-            </Dialog.Root>
+            <AdminFormDialog
+                open={dialog === 'set'}
+                onOpenChange={(open) => { if (!open) close(); }}
+                title="Set Active Semester"
+                onSubmit={() => run(() => OmniAPI.exec('set_semester', { semester_id: targetId }), 'Could not set the semester')}
+                busy={busy}
+                error={formError}
+                submitDisabled={!targetId}
+            >
+                <AdminField label="Select A Semester" htmlFor="semester-target">
+                    <select id="semester-target" value={targetId} onChange={(e) => setTargetId(e.target.value)} required>
+                        <option value="" disabled>Select a semester</option>
+                        {sorted.map((sem) => <option key={sem.id} value={sem.id}>{semesterName(sem)}</option>)}
+                    </select>
+                </AdminField>
+            </AdminFormDialog>
         </div>
     );
 };

@@ -412,133 +412,175 @@
     }
 }
 
-.admin-dialog-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    background-color: rgba(17, 28, 54, 0.55);
-}
-
-.admin-dialog {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    z-index: 1001;
-    width: min(480px, calc(100vw - 32px));
-    max-height: calc(100vh - 32px);
-    overflow-y: auto;
-    padding: 28px 24px 24px;
-    transform: translate(-50%, -50%);
-    background-color: var(--color-white);
-    border: 4px solid var(--color-navy);
-    border-radius: 10px;
-    font-family: 'Funnel Display', sans-serif;
-    color: var(--color-black);
-
-    &:focus {
-        outline: none;
-    }
-}
-
-.admin-dialog__close {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    display: inline-flex;
+.admin-roles-toolbar {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    color: var(--color-navy);
-    cursor: pointer;
-
-    &:hover {
-        background-color: var(--color-bg-light);
-    }
-
-    &:focus-visible {
-        outline: 3px solid var(--color-navy-mid);
-    }
-}
-
-.admin-dialog__title {
-    margin: 0;
-    font-weight: 700;
-    font-size: 26px;
-    text-align: center;
-    color: var(--color-navy);
-}
-
-.admin-dialog__divider {
-    display: block;
+    gap: 12px 16px;
     width: 100%;
-    height: 4px;
-    margin: 14px 0 18px;
-}
-
-.admin-dialog__field {
-    display: grid;
-    grid-template-columns: 130px minmax(0, 1fr);
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 14px;
+    box-sizing: border-box;
+    padding: 0 30px 16px;
+    font-family: 'Funnel Display', sans-serif;
 
     label {
         font-weight: 700;
-        font-size: 18px;
-        text-align: right;
+        font-size: 20px;
+        color: var(--color-black);
     }
 
-    input,
     select {
         box-sizing: border-box;
-        width: 100%;
-        height: 34px;
+        flex: 0 1 300px;
+        min-width: 0;
+        height: 40px;
         padding: 0 10px;
         background-color: var(--color-white);
         border: 2px solid var(--color-black);
         border-radius: 5px;
-        font-family: 'Funnel Display', sans-serif;
+        font-family: inherit;
         font-size: 16px;
-
-        &:focus-visible {
-            outline: 3px solid var(--color-navy-mid);
-            outline-offset: 1px;
-        }
     }
-
-    @media (max-width: 480px) {
-        grid-template-columns: 1fr;
-        gap: 6px;
-
-        label {
-            text-align: left;
-        }
-    }
-}
-
-.admin-dialog__text {
-    margin: 0 0 18px;
-    font-size: 16px;
-    line-height: 1.5;
-    color: var(--color-navy);
-}
-
-.admin-dialog__error {
-    margin: 0 0 14px;
-    font-size: 15px;
-    color: var(--color-red);
-}
-
-.admin-dialog__actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
 
     .admin-btn {
+        gap: 6px;
         height: 40px;
-        min-width: 110px;
-        font-size: 18px;
+        margin-left: auto;
+    }
+
+    @media (max-width: 600px) {
+        padding: 0 16px 16px;
+
+        select {
+            flex: 1 1 100%;
+        }
+
+        .admin-btn {
+            width: 100%;
+            margin-left: 0;
+        }
+    }
+}
+
+// Admin tables: text wraps inside the card instead of each cell or the whole table scrolling
+.admin-content {
+    .table-container {
+        overflow: visible;
+
+        table {
+            table-layout: auto;
+        }
+
+        th,
+        td {
+            max-width: none;
+        }
+
+        td {
+            height: auto;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            white-space: normal;
+            overflow-wrap: break-word;
+            vertical-align: middle;
+        }
+
+        .cell-content {
+            overflow: visible;
+            white-space: normal;
+        }
+
+        table.is-loading tbody {
+            opacity: 0.5;
+            transition: opacity 150ms ease;
+        }
+    }
+
+    .cell-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+
+        small {
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--color-slate);
+        }
+    }
+
+    .table-message {
+        margin: 24px 30px;
+        font-family: 'Funnel Display', sans-serif;
+        font-size: 16px;
+        font-style: italic;
+        color: var(--color-slate);
+
+        &--error {
+            font-style: normal;
+            color: var(--color-red);
+        }
+    }
+
+    // Phones: each row becomes a small card of "Label: value" lines
+    @media (max-width: 700px) {
+        .table-container {
+            thead {
+                display: none;
+            }
+
+            table,
+            tbody,
+            tr,
+            td {
+                display: block;
+                width: 100%;
+            }
+
+            tr {
+                position: relative;
+                padding: 10px 16px;
+                border-bottom: 1px solid var(--color-border);
+            }
+
+            table.has-actions tr {
+                padding-right: 64px;
+            }
+
+            td,
+            th:first-of-type,
+            td:first-of-type {
+                display: grid;
+                grid-template-columns: 110px minmax(0, 1fr);
+                gap: 8px;
+                height: auto;
+                padding: 3px 0;
+                border: none;
+                font-size: 15px;
+            }
+
+            td::before {
+                content: attr(data-label);
+                font-weight: 700;
+                font-size: 13px;
+                text-transform: uppercase;
+                color: var(--color-navy);
+            }
+
+            tr:last-of-type td {
+                border-bottom: none;
+            }
+
+            td.icon {
+                position: absolute;
+                top: 10px;
+                right: 12px;
+                display: block;
+                width: auto;
+                padding: 0;
+
+                &::before {
+                    content: none;
+                }
+            }
+        }
     }
 }

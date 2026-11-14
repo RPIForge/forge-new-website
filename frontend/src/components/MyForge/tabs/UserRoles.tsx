@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowLeftIcon, ArrowRightIcon, Cross2Icon, PlusIcon } from '@radix-ui/react-icons';
+import { PlusIcon } from '@radix-ui/react-icons';
+import { AdminField, AdminFormDialog, errorMessage } from '../../Admin/AdminForm';
 
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { Role, User } from 'src/interfaces';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
-import Table, { ITEMS_PER_PAGE, TableHead } from '../components/Table';
+import Table, { TableHead } from '../components/Table';
 
 import '../styles/TabStyles.scss';
 
@@ -23,12 +23,15 @@ const UserRoles: React.FC = () => {
     const [selectedRoleId, setSelectedRoleId] = useState('');
     const [assignedUsers, setAssignedUsers] = useState<RoleUserRow[]>([]);
 
-    const [showAddUsersPanel, setShowAddUsersPanel] = useState(false);
-    const [addUsersPageIndex, setAddUsersPageIndex] = useState(1);
-    const [addUsersPageData, setAddUsersPageData] = useState<RoleUserRow[]>([]);
-    const [addUsersHasMore, setAddUsersHasMore] = useState(false);
-    const [userSearchQuery, setUserSearchQuery] = useState('');
-    const selectedRoleName = allRoles.find((activeRole) => activeRole.id === selectedRoleId)?.name ?? 'Selected Role';
+    const [assignOpen, setAssignOpen] = useState(false);
+    const [allUsers, setAllUsers] = useState<RoleUserRow[] | null>(null);
+    const [userQuery, setUserQuery] = useState('');
+    const [assignRoleId, setAssignRoleId] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [formError, setFormError] = useState('');
+
+    const [usersLoading, setUsersLoading] = useState(true);
+    const [usersError, setUsersError] = useState('');
 
     const fetchRoles = async () => {
         try {
@@ -39,8 +42,10 @@ const UserRoles: React.FC = () => {
             if (!selectedRoleId && fetchedRoles.length > 0) {
                 setSelectedRoleId(fetchedRoles[0].id);
             }
+            if (fetchedRoles.length === 0) setUsersLoading(false);
         } catch {
             setAllRoles([]);
+            setUsersLoading(false);
         }
     };
 
@@ -50,7 +55,10 @@ const UserRoles: React.FC = () => {
             return;
         }
 
-        OmniAPI.get('users/role', selectedRoleId)
+        setUsersLoading(true);
+        setUsersError('');
+        // This endpoint only returns 20 users per request, so load every page
+        OmniAPI.getEvery(`users/role/${selectedRoleId}`)
             .then((res) => {
                 const users = Array.isArray(res) ? (res as User[]) : [];
                 setAssignedUsers(users.map((activeUser) => ({
@@ -60,29 +68,25 @@ const UserRoles: React.FC = () => {
                     RCSID: activeUser.RCSID,
                 })));
             })
-            .catch(() => setAssignedUsers([]));
+            .catch(() => {
+                setAssignedUsers([]);
+                setUsersError('Could not load the users with this role.');
+            })
+            .finally(() => setUsersLoading(false));
     };
 
-    const fetchAddUsersPage = (pageIndex: number) => {
-        if (!canSeeUsers) return;
-        
-        const offset = (pageIndex - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll('users', { limit: ITEMS_PER_PAGE + 1, offset, order_by: 'RCSID' })
-            .then((res) => {
-                const users = Array.isArray(res) ? (res as User[]) : [];
-                setAddUsersHasMore(users.length > ITEMS_PER_PAGE);
-                setAddUsersPageData(users.slice(0, ITEMS_PER_PAGE).map((activeUser) => ({
-                    id: activeUser.id,
-                    first_name: activeUser.first_name,
-                    last_name: activeUser.last_name,
-                    RCSID: activeUser.RCSID,
-                })));
-            })
-            .catch(() => {
-                setAddUsersPageData([]);
-                setAddUsersHasMore(false);
-            });
-    };
+    // Only load the full user list once the assign form is opened
+    useEffect(() => {
+        if (!assignOpen || allUsers !== null || !canSeeUsers) return;
+        OmniAPI.getEvery('users', { order_by: 'RCSID' })
+            .then((res) => setAllUsers((Array.isArray(res) ? (res as User[]) : []).map((activeUser) => ({
+                id: activeUser.id,
+                first_name: activeUser.first_name,
+                last_name: activeUser.last_name,
+                RCSID: activeUser.RCSID,
+            }))))
+            .catch(() => setAllUsers([]));
+    }, [assignOpen, canSeeUsers]);
 
     useEffect(() => {
         if (!canSeeRoles) return;
@@ -93,13 +97,6 @@ const UserRoles: React.FC = () => {
         if (!canSeeUsers || !canSeeRoles) return;
         fetchUsersForSelectedRole();
     }, [canSeeUsers, canSeeRoles, selectedRoleId]);
-
-    useEffect(() => {
-        if (showAddUsersPanel && canSeeUsers) {
-            setAddUsersPageIndex(1);
-            fetchAddUsersPage(1);
-        }
-    }, [showAddUsersPanel, canSeeUsers]);
 
     const onDelete = (index_local: number, index_real: number) => {
         if (!canChangeUserRoles) {
@@ -121,79 +118,48 @@ const UserRoles: React.FC = () => {
         });
     };
 
-    const onAdd = (activeUser: RoleUserRow) => {
+    const userLabel = (activeUser: RoleUserRow) => `${activeUser.RCSID} (${activeUser.first_name} ${activeUser.last_name})`;
+
+    const openAssign = () => {
+        setFormError('');
+        setUserQuery('');
+        setAssignRoleId(selectedRoleId);
+        setAssignOpen(true);
+    };
+
+    const assignRole = async () => {
         if (!canChangeUserRoles) {
-            alert('You do not have permissions to change user roles');
+            setFormError('You do not have permissions to change user roles.');
             return;
         }
-        if (!selectedRoleId) return;
-
-        OmniAPI.edit('users', 'role', {
-            user_id: activeUser.id,
-            role_id: selectedRoleId,
-            should_have_role: true,
-        }).then(() => {
-            fetchUsersForSelectedRole();
-            if (showAddUsersPanel) {
-                setAddUsersPageIndex(1);
-                fetchAddUsersPage(1);
-            }
-        }).catch(() => {
-            alert('Failed to add role to user');
-        });
-    };
-
-    // user search
-    const assignedUserIds = new Set(assignedUsers.map((activeUser) => activeUser.id));
-    const normalizedSearchQuery = userSearchQuery.trim().toLowerCase();
-
-    const filteredAddUsers = addUsersPageData
-        .filter((activeUser) => {
-            if (!normalizedSearchQuery) return true;
-            return [activeUser.first_name, activeUser.last_name, activeUser.RCSID]
-                .some((value) => value.toLowerCase().includes(normalizedSearchQuery));
-        })
-        .map((activeUser) => {
-            if (!normalizedSearchQuery) {
-                return { activeUser, score: 0 };
-            }
-
-            const firstName = activeUser.first_name.toLowerCase();
-            const lastName = activeUser.last_name.toLowerCase();
-            const rcsid = activeUser.RCSID.toLowerCase();
-
-            let score = 3;
-            if (rcsid === normalizedSearchQuery || firstName === normalizedSearchQuery || lastName === normalizedSearchQuery) {
-                score = 0;
-            } else if (rcsid.startsWith(normalizedSearchQuery) || firstName.startsWith(normalizedSearchQuery) || lastName.startsWith(normalizedSearchQuery)) {
-                score = 1;
-            } else if (rcsid.includes(normalizedSearchQuery)) {
-                score = 2;
-            }
-
-            return { activeUser, score };
-        })
-        .sort((left, right) => {
-            if (left.score !== right.score) return left.score - right.score;
-
-            const leftName = `${left.activeUser.first_name} ${left.activeUser.last_name} ${left.activeUser.RCSID}`.toLowerCase();
-            const rightName = `${right.activeUser.first_name} ${right.activeUser.last_name} ${right.activeUser.RCSID}`.toLowerCase();
-            return leftName.localeCompare(rightName);
-        })
-        .map(({ activeUser }) => activeUser);
-
-    const handlePreviousAddUsersPage = () => {
-        if (addUsersPageIndex === 1) return;
-        const newPage = addUsersPageIndex - 1;
-        setAddUsersPageIndex(newPage);
-        fetchAddUsersPage(newPage);
-    };
-
-    const handleNextAddUsersPage = () => {
-        if (!addUsersHasMore) return;
-        const newPage = addUsersPageIndex + 1;
-        setAddUsersPageIndex(newPage);
-        fetchAddUsersPage(newPage);
+        const query = userQuery.trim().toLowerCase();
+        const match = (allUsers ?? []).find((activeUser) =>
+            userLabel(activeUser).toLowerCase() === query || activeUser.RCSID.toLowerCase() === query
+        );
+        if (!match) {
+            setFormError('Pick a user from the list.');
+            return;
+        }
+        if (!assignRoleId) {
+            setFormError('Pick a role.');
+            return;
+        }
+        setBusy(true);
+        setFormError('');
+        try {
+            await OmniAPI.edit('users', 'role', {
+                user_id: match.id,
+                role_id: assignRoleId,
+                should_have_role: true,
+            });
+            if (assignRoleId === selectedRoleId) fetchUsersForSelectedRole();
+            else setSelectedRoleId(assignRoleId);
+            setAssignOpen(false);
+        } catch (err) {
+            setFormError(errorMessage(err, 'Failed to add the role to that user.'));
+        } finally {
+            setBusy(false);
+        }
     };
 
     if (!canSeeRoles || !canSeeUsers) return null;
@@ -201,10 +167,9 @@ const UserRoles: React.FC = () => {
     return (
         <div className='tab-column-cover align-center'>
             <TableHead heading='User Roles' />
-            <div className='Fieldset' style={{ width: '100%', maxWidth: '1100px' }}>
-                <label className='Label' htmlFor='role-select'>Role</label>
+            <div className='admin-roles-toolbar'>
+                <label htmlFor='role-select'>Role</label>
                 <select
-                    className='Input'
                     id='role-select'
                     value={selectedRoleId}
                     onChange={(e) => setSelectedRoleId(e.target.value)}
@@ -216,105 +181,60 @@ const UserRoles: React.FC = () => {
                         </option>
                     ))}
                 </select>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <label className='Label' style={{ marginBottom: 0 }}>Users</label>
-                    {canChangeUserRoles && (
-                        <button className='addbtn' type='button' onClick={() => setShowAddUsersPanel(true)}>
-                            <PlusIcon />
-                        </button>
-                    )}
-                </div>
-
+                {canChangeUserRoles && (
+                    <button className='admin-btn' type='button' onClick={openAssign}>
+                        <PlusIcon /> Assign Role
+                    </button>
+                )}
+            </div>
+            <div style={{ width: '100%' }}>
                 <Table<RoleUserRow>
-                    columns={['first_name', 'last_name', 'RCSID']}
+                    columnDefs={[
+                        { key: 'name', label: 'Name', render: (u) => `${u.first_name} ${u.last_name}` },
+                        { key: 'rcsid', label: 'RCS ID', render: (u) => u.RCSID },
+                    ]}
+                    loading={usersLoading}
+                    error={usersError}
+                    emptyMessage='No users have this role yet.'
                     data={assignedUsers}
                     onDelete={canChangeUserRoles ? onDelete : undefined}
                     canDelete={canChangeUserRoles}
                 />
             </div>
 
-            <Dialog.Root open={showAddUsersPanel} onOpenChange={setShowAddUsersPanel}>
-                <Dialog.Portal>
-                    <div className='AEdiv'>
-                        <Dialog.Overlay className='DialogOverlay' />
-                        <Dialog.Content className='DialogContent' aria-describedby={undefined}>
-                            <Dialog.Close asChild>
-                                <button className='IconButton' aria-label='Close'>
-                                    <Cross2Icon />
-                                </button>
-                            </Dialog.Close>
-                            <Dialog.Title className='DialogTitle'>Assign Users the {selectedRoleName} Role</Dialog.Title>
-                            <fieldset className='Fieldset'>
-                                <label className='Label' htmlFor='user-search'>Search</label>
-                                <input
-                                    id='user-search'
-                                    className='Input'
-                                    value={userSearchQuery}
-                                    onChange={(e) => {
-                                        setUserSearchQuery(e.target.value);
-                                        setAddUsersPageIndex(1);
-                                        fetchAddUsersPage(1);
-                                    }}
-                                    placeholder='Search by name or RCSID'
-                                />
-                                <div className='Label'>Users</div>
-                                <div className='table-container' style={{ marginTop: '0.25rem', padding: 0, maxHeight: '30vh' }}>
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>First Name</th>
-                                                <th>Last Name</th>
-                                                <th>RCSID</th>
-                                                <th></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredAddUsers.length > 0 ? filteredAddUsers.map((activeUser) => (
-                                                <tr key={activeUser.id}>
-                                                    <td>{activeUser.first_name}</td>
-                                                    <td>{activeUser.last_name}</td>
-                                                    <td>{activeUser.RCSID}</td>
-                                                    <td style={{ textAlign: 'center' }}>
-                                                         {!assignedUserIds.has(activeUser.id) && (
-                                                            <button
-                                                                className='Button'
-                                                                type='button'
-                                                                onClick={() => onAdd(activeUser)}
-                                                            >
-                                                                Add
-                                                            </button>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            )) : (
-                                                <tr>
-                                                    <td colSpan={4} style={{ textAlign: 'center' }}>No users are present.</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div className='pagination-container'>
-                                    <div className='pagination'>
-                                        <button onClick={handlePreviousAddUsersPage} disabled={addUsersPageIndex === 1} aria-label='Previous page'>
-                                            <ArrowLeftIcon />
-                                        </button>
-
-                                        <button className='active' aria-current='page'>
-                                            {addUsersPageIndex}
-                                        </button>
-
-                                        <button onClick={handleNextAddUsersPage} disabled={!addUsersHasMore} aria-label='Next page'>
-                                            <ArrowRightIcon />
-                                        </button>
-                                    </div>
-                                </div>
-                            </fieldset>
-                        </Dialog.Content>
-                    </div>
-                </Dialog.Portal>
-            </Dialog.Root>
+            <AdminFormDialog
+                open={assignOpen}
+                onOpenChange={setAssignOpen}
+                title='Assign / Change User Role'
+                onSubmit={assignRole}
+                busy={busy}
+                error={formError}
+            >
+                <AdminField label='Select a User' htmlFor='assign-user'>
+                    <input
+                        id='assign-user'
+                        list='assign-user-options'
+                        value={userQuery}
+                        onChange={(e) => setUserQuery(e.target.value)}
+                        placeholder={allUsers === null ? 'Loading users…' : 'Type a name or RCS ID'}
+                        autoComplete='off'
+                        required
+                    />
+                    <datalist id='assign-user-options'>
+                        {(allUsers ?? []).map((activeUser) => (
+                            <option key={activeUser.id} value={userLabel(activeUser)} />
+                        ))}
+                    </datalist>
+                </AdminField>
+                <AdminField label='Select a Role' htmlFor='assign-role'>
+                    <select id='assign-role' value={assignRoleId} onChange={(e) => setAssignRoleId(e.target.value)} required>
+                        <option value='' disabled>Select a role</option>
+                        {allRoles.map((activeRole) => (
+                            <option key={activeRole.id} value={activeRole.id}>{activeRole.name}</option>
+                        ))}
+                    </select>
+                </AdminField>
+            </AdminFormDialog>
         </div>
     );
 };
