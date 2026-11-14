@@ -62,6 +62,43 @@ export const AdminFormDialog: React.FC<AdminFormDialogProps> = ({
     );
 };
 
+// Same card as the forms, for read-only details
+export const AdminInfoDialog: React.FC<{
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    title: string;
+    children: ReactNode;
+}> = ({ open, onOpenChange, title, children }) => (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+        <Dialog.Portal>
+            <Dialog.Overlay className="admin-form-overlay" />
+            <Dialog.Content className="admin-form" aria-describedby={undefined}>
+                <Dialog.Close asChild>
+                    <button type="button" className="admin-form__close" aria-label="Close"><Cross2Icon /></button>
+                </Dialog.Close>
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <Dialog.Title className="admin-form__title">{title}</Dialog.Title>
+                    <img className="admin-form__divider" src={dividerLine} alt="" aria-hidden="true" />
+                    <div className="admin-form__body">{children}</div>
+                    <div className="admin-form__actions">
+                        <Dialog.Close asChild>
+                            <button type="button" className="admin-form__submit">Close</button>
+                        </Dialog.Close>
+                    </div>
+                </form>
+            </Dialog.Content>
+        </Dialog.Portal>
+    </Dialog.Root>
+);
+
+// A "Label   value" line inside an info dialog
+export const AdminInfoRow: React.FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+    <div className="admin-form__info-row">
+        <dt>{label}</dt>
+        <dd>{children}</dd>
+    </div>
+);
+
 // A right-aligned "Label [ input ]" row
 export const AdminField: React.FC<{ label: string; htmlFor: string; children: ReactNode }> = ({ label, htmlFor, children }) => (
     <div className="admin-form__field">

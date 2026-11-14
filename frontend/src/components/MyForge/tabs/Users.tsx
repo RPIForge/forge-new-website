@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { OmniAPI } from 'src/apis/OmniAPI';
-import Table, { ColumnDef, DeleteItem, TableHead, formatCell, usePagedList } from '../components/Table';
+import React, { useState } from 'react';
+import Table, { ColumnDef, TableHead, formatCell, usePagedList } from '../components/Table';
+import { AdminInfoDialog, AdminInfoRow } from '../../Admin/AdminForm';
+import { groupedPermissions, permissionLabel } from '../../Admin/permissions';
 import { User } from 'src/interfaces';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
@@ -18,6 +19,56 @@ const PRONOUN_LABELS: Record<string, string> = {
     she_they: 'She/They',
     all_any: 'Any',
     use_name: 'Use my name',
+};
+
+const GENDER_LABELS: Record<string, string> = {
+    notdisclosed: 'Not disclosed',
+    male: 'Male',
+    female: 'Female',
+    other: 'Other',
+};
+
+// Everything we have on a user, shown when their row is clicked
+const UserDetails: React.FC<{ user: User | null; onClose: () => void }> = ({ user, onClose }) => {
+    const granted = new Set(user?.permissions ?? []);
+    const groups = groupedPermissions
+        .map((group) => ({ label: group.label, permissions: group.permissions.filter((perm) => granted.has(perm)) }))
+        .filter((group) => group.permissions.length > 0);
+
+    return (
+        <AdminInfoDialog
+            open={user !== null}
+            onOpenChange={(open) => { if (!open) onClose(); }}
+            title={user ? `${user.first_name} ${user.last_name}` : 'User'}
+        >
+            {user && (
+                <dl className="admin-form__info">
+                    <AdminInfoRow label="RCS ID">{user.RCSID}</AdminInfoRow>
+                    <AdminInfoRow label="RPI Email">{`${user.RCSID}@rpi.edu`}</AdminInfoRow>
+                    <AdminInfoRow label="RIN">{user.RIN}</AdminInfoRow>
+                    <AdminInfoRow label="Major">{formatCell(user.major)}</AdminInfoRow>
+                    <AdminInfoRow label="Pronouns">{PRONOUN_LABELS[user.pronouns] ?? formatCell(user.pronouns)}</AdminInfoRow>
+                    <AdminInfoRow label="Gender Identity">{GENDER_LABELS[user.gender_identity] ?? formatCell(user.gender_identity)}</AdminInfoRow>
+                    <AdminInfoRow label="Role">{formatCell(user.display_role)}</AdminInfoRow>
+                    <AdminInfoRow label="Balance">{`$${Number(user.semester_balance ?? 0).toFixed(2)} this semester`}</AdminInfoRow>
+                    <AdminInfoRow label="Graduating">{formatCell(Boolean(user.is_graduating))}</AdminInfoRow>
+                    <AdminInfoRow label="Answered Graduation">{user.checked_graduating ? 'Yes' : 'Not yet'}</AdminInfoRow>
+                    <AdminInfoRow label="RPI Staff">{formatCell(Boolean(user.is_rpi_staff))}</AdminInfoRow>
+                    <AdminInfoRow label="Email">{user.is_email_verified ? 'Verified' : 'Unverified'}</AdminInfoRow>
+                    <AdminInfoRow label="Permissions">
+                        {granted.has(UserPermission.IS_SUPERUSER) ? 'Superuser (every permission)' : groups.length === 0 ? 'None' : groups.map((group) => (
+                            <div key={group.label}>
+                                <p className="admin-form__info-group">{group.label}</p>
+                                <ul className="admin-form__perm-list">
+                                    {group.permissions.map((perm) => <li key={perm}>{permissionLabel(perm)}</li>)}
+                                </ul>
+                            </div>
+                        ))}
+                    </AdminInfoRow>
+                </dl>
+            )}
+        </AdminInfoDialog>
+    );
 };
 
 const Users: React.FC = () => {
@@ -48,13 +99,10 @@ const Users: React.FC = () => {
         { key: 'role', label: 'Role', render: (u) => formatCell(u.display_role) },
         { key: 'balance', label: 'Balance', render: (u) => `$${Number(u.semester_balance ?? 0).toFixed(2)}` },
         { key: 'graduating', label: 'Graduating', render: (u) => formatCell(Boolean(u.is_graduating)) },
-        { key: 'staff', label: 'RPI Staff', render: (u) => formatCell(Boolean(u.is_rpi_staff)) },
         { key: 'verified', label: 'Email', render: (u) => u.is_email_verified ? 'Verified' : 'Unverified' },
     ];
 
-    const onDelete = (index_local: number, index_real: number) => {
-        DeleteItem('users', data[index_real], refreshPage);
-    };
+    const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
     if (!canSeeTables || !canSeeUsers) return null;
     return (
@@ -72,7 +120,10 @@ const Users: React.FC = () => {
                 currentPage={currentPage}
                 onPageChange={fetchPage}
                 resourceType="users"
+                onRowClick={setSelectedUser}
+                rowLabel={(u) => `View details for ${u.first_name} ${u.last_name}`}
             />
+            <UserDetails user={selectedUser} onClose={() => setSelectedUser(null)} />
         </div>
     );
 };

@@ -8,7 +8,6 @@ import { userState } from 'src/GlobalAtoms';
 import { User } from 'src/interfaces';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { AuthAPI } from 'src/apis/AuthAPI';
-import bgPattern from '../../assets/img/background.svg?url';
 import rulerMask from '../../assets/img/ruler-mask-tile.svg?url';
 import anvilImg from '../../assets/img/anvil_with_benchys.png';
 import PageRuler from '../shared/PageRuler';
@@ -72,19 +71,6 @@ export const FormCard = styled.div`
     flex-direction: column;
     align-items: center;
     box-shadow: 0 8px 32px rgba(17,28,54,0.25);
-
-    /* subtle background pattern inside card */
-    &::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-image: url(${bgPattern});
-        background-repeat: repeat;
-        background-size: 122px 140px;
-        opacity: 0.03;
-        pointer-events: none;
-        z-index: 0;
-    }
 
     @media screen and (max-width: 700px) {
         width: calc(100% - 48px);

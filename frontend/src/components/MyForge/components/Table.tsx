@@ -26,6 +26,9 @@ interface TableProps<T> {
     emptyMessage?: string;
     // Smaller headers, and switches to stacked rows sooner, for tables with many columns
     compact?: boolean;
+    // Makes each row clickable, e.g. to open a details view
+    onRowClick?: (row: T) => void;
+    rowLabel?: (row: T) => string;
     canEdit?: boolean;
     canDelete?: boolean;
     onEdit?: (activeItem: T) => void;
@@ -142,7 +145,7 @@ export function TableHead<T>(props: TableHeadProps<T>) {
 }
 
 function Table<T>(props: TableProps<T>) {
-    const { columns = [], columnDefs, data, onDelete, onEdit, canEdit, canDelete, loading, error, emptyMessage, compact } = props;
+    const { columns = [], columnDefs, data, onDelete, onEdit, canEdit, canDelete, loading, error, emptyMessage, compact, onRowClick, rowLabel } = props;
     const hasNextProp = props.hasNext;
     const {
         currentPage: currentPageProp,
@@ -236,7 +239,19 @@ function Table<T>(props: TableProps<T>) {
                     </thead>
                     <tbody>
                         {data.map((row, rowIndex) => (
-                            <tr key={rowIndex}>
+                            <tr
+                                key={rowIndex}
+                                className={onRowClick ? 'is-clickable' : undefined}
+                                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                                onKeyDown={onRowClick ? (e) => {
+                                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                                        e.preventDefault();
+                                        onRowClick(row);
+                                    }
+                                } : undefined}
+                                tabIndex={onRowClick ? 0 : undefined}
+                                aria-label={onRowClick && rowLabel ? rowLabel(row) : undefined}
+                            >
                                 {defs.map((def) => {
                                     const content = def.render(row);
                                     const title = def.text ? def.text(row) : (typeof content === 'string' ? content : undefined);
@@ -253,7 +268,7 @@ function Table<T>(props: TableProps<T>) {
                                                 type="button"
                                                 className="edit"
                                                 aria-label="Edit"
-                                                onClick={() => onEdit?.(row)}
+                                                onClick={(e) => { e.stopPropagation(); onEdit?.(row); }}
                                             >
                                                 <img src={editIcon} alt="" />
                                             </button>
@@ -263,7 +278,7 @@ function Table<T>(props: TableProps<T>) {
                                                 type="button"
                                                 className="trash"
                                                 aria-label="Delete"
-                                                onClick={() => onDelete(rowIndex, rowIndex)}
+                                                onClick={(e) => { e.stopPropagation(); onDelete(rowIndex, rowIndex); }}
                                             >
                                                 <img src={deleteIcon} alt="" />
                                             </button>

@@ -31,7 +31,7 @@ const PageWrapper = styled.div`
         inset: 0;
         background-image: url(${bgPattern});
         background-repeat: repeat;
-        background-size: 122px 140px;
+        background-size: 121.15px 139.75px;
         opacity: 0.09;
         pointer-events: none;
     }
@@ -51,18 +51,6 @@ const Card = styled.div`
     flex-direction: column;
     align-items: center;
     box-shadow: 0 12px 48px rgba(17,28,54,0.18), 0 2px 8px rgba(17,28,54,0.08);
-
-    &::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-image: url(${bgPattern});
-        background-repeat: repeat;
-        background-size: 122px 140px;
-        opacity: 0.04;
-        pointer-events: none;
-        z-index: 0;
-    }
 `;
 
 const CardInner = styled.div`
@@ -280,7 +268,6 @@ export const FailAMachineForm: React.FC = () => {
     const [printerErrorMessage, setPrinterErrorMessage] = useState<string>("");
     const [noticeableFaults, setNoticeableFaults] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
 
     /**
      * Load Machines

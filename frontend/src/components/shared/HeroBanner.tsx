@@ -67,7 +67,7 @@ const BackgroundPattern = styled.div`
     inset: 0;
     background-image: url("${bgPattern}");
     background-repeat: repeat;
-    background-size: 122px 140px;
+    background-size: 121.15px 139.75px;
     opacity: 0.1;
     pointer-events: none;
     z-index: 0;

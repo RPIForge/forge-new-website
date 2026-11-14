@@ -23,17 +23,6 @@
     font-family: 'Funnel Display', sans-serif;
     color: var(--color-black);
 
-    &::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-image: url('../../assets/img/background.svg');
-        background-repeat: repeat;
-        background-size: 122px 140px;
-        opacity: 0.1;
-        pointer-events: none;
-    }
-
     &:focus {
         outline: none;
     }
@@ -194,6 +183,48 @@
     color: var(--color-navy);
 }
 
+.admin-form__info {
+    align-self: stretch;
+    margin: 0;
+    padding: 0 10px;
+}
+
+.admin-form__info-row {
+    display: grid;
+    grid-template-columns: 170px minmax(0, 1fr);
+    gap: 16px;
+    padding: 8px 0;
+
+    dt {
+        font-weight: 700;
+        font-size: 16px;
+    }
+
+    dd {
+        margin: 0;
+        font-size: 16px;
+        color: var(--color-navy);
+        overflow-wrap: break-word;
+    }
+
+    @media (max-width: 480px) {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+}
+
+.admin-form__info-group {
+    margin: 12px 0 2px;
+    font-weight: 700;
+    font-size: 18px;
+}
+
+.admin-form__perm-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 15px;
+}
+
 .admin-form__empty {
     margin: 0;
     padding: 10px;
@@ -261,17 +292,18 @@
 }
 
 .admin-form__perm-head {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    padding: 6px 0;
-    background-color: var(--color-white);
+    padding: 10px 0 0;
     font-weight: 700;
     font-size: 15px;
 
     span:not(:first-child) {
+        align-self: end;
         text-align: center;
     }
+}
+
+.admin-form__perm-title {
+    font-size: 20px;
 }
 
 .admin-form__perm-group {
