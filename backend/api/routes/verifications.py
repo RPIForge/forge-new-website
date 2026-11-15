@@ -46,8 +46,10 @@ async def create_token(
     session.add(auth_token)
     await session.commit()
 
-    print("token: ", token)
-
+    # The raw token is deliberately never stored (only token_hash is) so that it
+    # cannot be recovered from the database. Printing it defeated that: it covers
+    # password resets as well, so anyone able to read the logs could take over an
+    # account within the token's validity window.
     await send_email(f"{current_user.RCSID}@rpi.edu", token, tokenType)
 
     return VerificationTokenResponse(token_type=tokenType, success=True)
