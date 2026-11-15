@@ -15,14 +15,12 @@ const Register = lazy(() => import('./components/Forms/Register'));
 const VerifyEmail = lazy(() => import('./components/Forms/VerifyEmail'));
 const ResetPassword = lazy(() => import('./components/Forms/ResetPassword'));
 const ComingSoon = lazy(() => import('./components/Home/ComingSoon'));
-const NewStatus = lazy(() => import('./components/Status/Status'));
 const MyForge = lazy(() => import('./components/MyForge/MyForge'));
 const Hours = lazy(() => import('./components/Hours/Hours'));
 const Wiki = lazy(() => import('./components/Learn/Wiki'));
 const AboutUs = lazy(() => import('./components/AboutUs/AboutUs'));
 
 // import Home from './components/Home/Home';
-// import NewStatus from './components/Status/NewStatus';
 // import Login from './components/Forms/Login';
 // import Register from './components/Forms/Register';
 // import ComingSoon from './components/Home/ComingSoon';
@@ -55,7 +53,7 @@ export default function App() {
             <Suspense fallback={<div>Loading...</div>}>
                 <Routes>
                     <Route path="/" Component={Home} />
-                    <Route path="/status" Component={NewStatus} />
+                    <Route path="/status" Component={Status} />
                     <Route path="/login" Component={Login} />
                     <Route path="/register" Component={Register} />
                     <Route path="/reset-password" Component={ResetPassword} />
