@@ -53,9 +53,11 @@ export const FailAMachineForm: React.FC = () => {
         const elapsedSeconds = (Date.now() - new Date(usage.usage_start).getTime()) / 1000;
         const expectedPercent = Math.round((elapsedSeconds / usage.usage_duration) * 100);
 
-        if (expectedPercent >= 100) {
-            return confirm("This print should have already finished. Did it actually fail?");
-        }
+        // A print past its expected finish time may well have failed and only been
+        // found later -- overnight runs are normal here -- so any reported
+        // percentage is plausible and there is nothing to warn about.
+        if (expectedPercent >= 100) return true;
+
         if (Math.abs(expectedPercent - estimatedPercentCompleted) > PERCENT_MARGIN) {
             return confirm(`Based on when it started, this print should be about ${Math.max(expectedPercent, 0)}% done, but you entered ${estimatedPercentCompleted}%. Is this the right machine?`);
         }
