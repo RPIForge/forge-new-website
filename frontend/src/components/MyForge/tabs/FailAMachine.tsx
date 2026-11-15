@@ -11,7 +11,7 @@ export const FailAMachineForm: React.FC = () => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState<string>("_");
     // I think this data is for the email the user gets sent? There isn't a way to pass it in the request TODO:
-    const [estimatedPercentCompleted, setEstimatedPercentCompleted] = useState(0);
+    const [estimatedPercentCompleted, setEstimatedPercentCompleted] = useState<number | null>(null);
     const [printerErrorMessage, setPrinterErrorMessage] = useState<string>("");
     const [noticeableFaults, setNoticeableFaults] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,16 +46,36 @@ export const FailAMachineForm: React.FC = () => {
 
     const PERCENT_MARGIN = 25;
 
-    const confirmLooksRight = (): boolean => {
+    /**
+     * Progress through the scheduled duration, or null when it can't be worked out.
+     * This is how far along the print *should* be, not where it actually failed.
+     */
+    const scheduledPercent = (): number | null => {
         const usage = inProgress[selectedMachineId];
-        if (!usage?.usage_start || !usage?.usage_duration) return true;
-
+        if (!usage?.usage_start || !usage?.usage_duration) return null;
         const elapsedSeconds = (Date.now() - new Date(usage.usage_start).getTime()) / 1000;
-        const expectedPercent = Math.round((elapsedSeconds / usage.usage_duration) * 100);
+        return Math.round((elapsedSeconds / usage.usage_duration) * 100);
+    };
 
-        // A print past its expected finish time may well have failed and only been
-        // found later -- overnight runs are normal here -- so any reported
-        // percentage is plausible and there is nothing to warn about.
+    /**
+     * A print found past its expected finish time tells us nothing about where it
+     * actually failed -- it may have reached 100% or died at 70% hours earlier and
+     * sat there. The printer knows; the site doesn't. So the percentage becomes
+     * optional here rather than a number we'd be guessing at.
+     */
+    const isPastExpectedFinish = (): boolean => {
+        const expected = scheduledPercent();
+        return expected !== null && expected >= 100;
+    };
+
+    const confirmLooksRight = (): boolean => {
+        const expectedPercent = scheduledPercent();
+        if (expectedPercent === null) return true;
+
+        // Nothing to check against when the volunteer didn't claim a percentage.
+        if (estimatedPercentCompleted === null) return true;
+
+        // Past its expected finish, any reported percentage is plausible.
         if (expectedPercent >= 100) return true;
 
         if (Math.abs(expectedPercent - estimatedPercentCompleted) > PERCENT_MARGIN) {
@@ -96,7 +116,7 @@ export const FailAMachineForm: React.FC = () => {
             machine_id: selectedMachineId,
             error_message: printerErrorMessage,
             noticeable_fault: noticeableFaults.join(", "),
-            percentage: estimatedPercentCompleted,
+            percentage: estimatedPercentCompleted,  // null when unknown; email omits it
         };
         try {
             const response = await OmniAPI.fail(data);
@@ -126,7 +146,7 @@ export const FailAMachineForm: React.FC = () => {
      */
     const resetFormFields = () => {
         setSelectedMachineId("_");
-        setEstimatedPercentCompleted(0);
+        setEstimatedPercentCompleted(null);
         setPrinterErrorMessage("");
         setNoticeableFaults([]);
     };
@@ -151,20 +171,34 @@ export const FailAMachineForm: React.FC = () => {
                 </select>
         
                 <div className="usage-duration">
-                    <label>Percent Completed</label>
+                    <label>
+                        Percent Completed{isPastExpectedFinish() ? " (optional)" : ""}
+                    </label>
                     <input
                         type="number"
-                        value={estimatedPercentCompleted}
-                        placeholder="0"
+                        value={estimatedPercentCompleted ?? ""}
+                        placeholder={isPastExpectedFinish() ? "Leave blank if unknown" : "0"}
                         min="0"
                         max="100"
                         onChange={(e) => {
-                            const value = parseInt(e.target.value);
-                            if (value >= 0 && value <= 100) {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                                setEstimatedPercentCompleted(null);
+                                return;
+                            }
+                            const value = parseInt(raw);
+                            if (!Number.isNaN(value) && value >= 0 && value <= 100) {
                                 setEstimatedPercentCompleted(value);
                             }
                         }}
                     />
+                    {isPastExpectedFinish() && (
+                        <small>
+                            This print is past its expected finish time, so we can't tell where it
+                            failed. Enter the percentage the printer reported if you know it,
+                            otherwise leave this blank and the email will just give the reason.
+                        </small>
+                    )}
                 </div>
                 <label>Error Message</label>
                 <div className="resource-usage-form">

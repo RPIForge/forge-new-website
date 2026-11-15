@@ -25,6 +25,17 @@ async def send_failure_email(email, machine_name, percentage, error_message, not
         settings.AZURE_COMMUNICATION_CONNECTION_STRING
     )
 
+    # A print found past its expected finish time gives no reliable signal of
+    # where it actually failed, so the volunteer may not have supplied a
+    # percentage. Claiming a number we cannot know would be worse than silence.
+    if percentage is None:
+        opening = f"Unfortunately, your machine usage on {machine_name} has failed."
+    else:
+        opening = (
+            f"Unfortunately, your machine usage on {machine_name} "
+            f"has failed at {percentage}%."
+        )
+
 
     message = {
         "senderAddress": "DoNotReply@notifications.rpiforge.dev",
@@ -34,7 +45,7 @@ async def send_failure_email(email, machine_name, percentage, error_message, not
         "content": {
             "subject": "Your Machine Usage Failed",
             "plainText": (
-                f"Unfortunately, your machine usage on {machine_name} has failed at {percentage}%.\n\n"
+                opening + "\n\n"
                 f"Reason given: {error_message or 'No reason given'}\n"
                 f"Noticeable faults: {noticeable_fault or 'None reported'}\n\n"
                 "You may want to stop by the Forge soon. If you used Forge filament, one reprint is free."
@@ -136,7 +147,9 @@ async def fail_machine(
             "user_rcsid": current_user.RCSID,
             "error_message": request.error_message,
             "noticeable_fault": request.noticeable_fault,
-            "percentage": str(request.percentage),
+            "percentage": (
+                str(request.percentage) if request.percentage is not None else None
+            ),
         },
     )
     session.add(audit_log)
@@ -150,7 +163,7 @@ async def fail_machine(
         await send_failure_email(
             f"{machine.active_usage.user.RCSID}@rpi.edu",
             machine.name,
-            str(request.percentage),
+            request.percentage,
             request.error_message,
             request.noticeable_fault,
         )
