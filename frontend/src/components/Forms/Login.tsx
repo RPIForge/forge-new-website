@@ -6,7 +6,16 @@ import { useRecoilState } from 'recoil';
 import { userState } from 'src/GlobalAtoms';
 import { User } from 'src/interfaces';
 
-import './styles/Login.scss';
+import AuthLayout, {
+    AuthButtonRow,
+    AuthDivider,
+    AuthField,
+    AuthFields,
+    AuthLink,
+    AuthPrimaryButton,
+    AuthPrompt,
+    AuthTitle,
+} from './AuthLayout';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { AuthAPI } from 'src/apis/AuthAPI';
 
@@ -82,31 +91,44 @@ export default function Login() {
     };
 
     return (
-        <div className='login-container'>
+        <AuthLayout>
             <form onSubmit={handleLogin}>
-                <div className='form-logo' />
-                <label>Sign In</label>
-                <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    placeholder="RCS ID"
-                />
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    placeholder="Password"
-                />
-                <div className='button-container'>
-                    <button type='submit'>Sign In</button>
-                    <a href="/reset-password">Forgot Password?</a>
-                </div>
-                <div className='seperator' />
-                <span className='register'>Don't have an account? <a href="/register">Register Here!</a></span>
+                <AuthTitle>Sign In</AuthTitle>
+                <AuthDivider />
+                <AuthFields>
+                    <AuthField>
+                        <label htmlFor="login-rcsid">RCS ID</label>
+                        <input
+                            id="login-rcsid"
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            required
+                            maxLength={10}
+                            autoComplete="username"
+                        />
+                    </AuthField>
+                    <AuthField>
+                        <label htmlFor="login-password">Password</label>
+                        <input
+                            id="login-password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            autoComplete="current-password"
+                        />
+                    </AuthField>
+                </AuthFields>
+                <AuthLink to="/reset-password" $end>Forgot password?</AuthLink>
+                <AuthButtonRow>
+                    <AuthPrimaryButton type="submit">Start Making!</AuthPrimaryButton>
+                </AuthButtonRow>
+                <AuthDivider gap="20px 0 14px" />
+                <AuthPrompt>
+                    Don’t have an account? <AuthLink to="/register">Register here</AuthLink>
+                </AuthPrompt>
             </form>
-        </div>
+        </AuthLayout>
     )
 }
