@@ -177,7 +177,7 @@ export const FailAMachineForm: React.FC = () => {
                     <input
                         type="number"
                         value={estimatedPercentCompleted ?? ""}
-                        placeholder={isPastExpectedFinish() ? "Leave blank if unknown" : "0"}
+                        placeholder={isPastExpectedFinish() ? "unknown" : "0"}
                         min="0"
                         max="100"
                         onChange={(e) => {
@@ -192,14 +192,14 @@ export const FailAMachineForm: React.FC = () => {
                             }
                         }}
                     />
-                    {isPastExpectedFinish() && (
-                        <small>
-                            This print is past its expected finish time, so we can't tell where it
-                            failed. Enter the percentage the printer reported if you know it,
-                            otherwise leave this blank and the email will just give the reason.
-                        </small>
-                    )}
                 </div>
+                {isPastExpectedFinish() && (
+                    <small className="percent-hint">
+                        This print is past its expected finish time, so we can't tell where it
+                        failed. Enter the percentage the printer reported if you know it,
+                        otherwise leave this blank and the email will just give the reason.
+                    </small>
+                )}
                 <label>Error Message</label>
                 <div className="resource-usage-form">
                     <input
