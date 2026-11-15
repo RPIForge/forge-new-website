@@ -1,11 +1,10 @@
 import React from "react";
-import { useResetRecoilState } from "recoil";
-import { userNameState, userState } from "src/GlobalAtoms";
 import { User } from "src/interfaces";
 import * as NavMenu from "@radix-ui/react-navigation-menu";
 import { CaretDownIcon } from "@radix-ui/react-icons";
 import * as Avatar from "../MyForge/components/Avatar";
 import * as Hamburger from "./Hamburger";
+import useAuth from "../Auth/useAuth";
 import { UserPermission } from "src/enums";
 import forgeLockupUrl from "../../assets/img/RPI_Lockup_Eng_Sm.svg?url";
 import forgeLogoUrl from "src/assets/img/forge-logo-blue.svg?url";
@@ -18,16 +17,10 @@ interface NavBarProps {
   isAuthed: boolean;
 }
 
-const UserMenu: React.FC<NavBarProps> = ({ user, setAuth, isAuthed }) => {
-  const setDefaultUser = useResetRecoilState(userState);
+const UserMenu: React.FC<NavBarProps> = ({ user, isAuthed }) => {
+  // logout() also stops the "you need to be logged in" alert from showing while signing out
+  const { logout } = useAuth();
 
-  const onSignOut = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
-    localStorage.removeItem("token_expiration");
-    setAuth(false);
-    setDefaultUser();
-  };
   if (isAuthed) {
     return (
       <NavMenu.Item className="user-item">
@@ -40,7 +33,7 @@ const UserMenu: React.FC<NavBarProps> = ({ user, setAuth, isAuthed }) => {
           <NavMenu.Link className="link" href="/myforge">
             Summary
           </NavMenu.Link>
-          <NavMenu.Link className="link" href="/" onSelect={(e) => onSignOut()}>
+          <NavMenu.Link className="link" href="/" onSelect={() => logout()}>
             Logout
           </NavMenu.Link>
         </NavMenu.Content>

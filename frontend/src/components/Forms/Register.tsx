@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import Majors from './data/sorted_majors.json';
 import AuthLayout, {
+    AuthButtonRow,
     AuthCheck,
     AuthChecks,
     AuthDivider,
@@ -165,13 +166,13 @@ export default function Register() {
     }
 
     return (
-        <AuthLayout>
+        <AuthLayout wide>
             <form onSubmit={(e) => handleRegister(e, formValues)}>
                 <AuthTitle>Registration Form</AuthTitle>
                 <AuthDivider />
-                <AuthFields>
+                <AuthFields $columns={2}>
                     {fields.filter((field) => field.type !== "checkbox").map((field) => (
-                        <AuthField key={field.id}>
+                        <AuthField key={field.id} $full={field.type === "dropdown"}>
                             <label htmlFor={`register-${field.id}`}>{field.label}<AuthRequired /></label>
                             {field.type === "dropdown" ? (
                                 <select
@@ -210,9 +211,11 @@ export default function Register() {
                         </AuthCheck>
                     ))}
                 </AuthChecks>
-                <AuthPrimaryButton type="submit" $wide disabled={isSubmitting}>
-                    {isSubmitting ? "Creating Account..." : "Start Making!"}
-                </AuthPrimaryButton>
+                <AuthButtonRow>
+                    <AuthPrimaryButton type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? "Creating Account..." : "Start Making!"}
+                    </AuthPrimaryButton>
+                </AuthButtonRow>
             </form>
         </AuthLayout>
     )

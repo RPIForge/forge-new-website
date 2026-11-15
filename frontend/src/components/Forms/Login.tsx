@@ -11,11 +11,10 @@ import AuthLayout, {
     AuthDivider,
     AuthField,
     AuthFields,
+    AuthLink,
     AuthPrimaryButton,
     AuthPrompt,
-    AuthSmallButton,
     AuthTitle,
-    AuthWideLink,
 } from './AuthLayout';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { AuthAPI } from 'src/apis/AuthAPI';
@@ -121,13 +120,14 @@ export default function Login() {
                         />
                     </AuthField>
                 </AuthFields>
+                <AuthLink to="/reset-password" $end>Forgot password?</AuthLink>
                 <AuthButtonRow>
                     <AuthPrimaryButton type="submit">Start Making!</AuthPrimaryButton>
-                    <AuthSmallButton to="/reset-password">Forgot Password?</AuthSmallButton>
                 </AuthButtonRow>
-                <AuthDivider gap="27px 0 11px" />
-                <AuthPrompt>Don’t have an account?</AuthPrompt>
-                <AuthWideLink to="/register">Register Here!</AuthWideLink>
+                <AuthDivider gap="20px 0 14px" />
+                <AuthPrompt>
+                    Don’t have an account? <AuthLink to="/register">Register here</AuthLink>
+                </AuthPrompt>
             </form>
         </AuthLayout>
     )
