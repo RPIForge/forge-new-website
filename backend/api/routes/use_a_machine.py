@@ -34,6 +34,13 @@ router = APIRouter()
 #   * it used less than FAILED_PRINT_MAX_GRAMS
 #   * the reprint claims no more than the failed print did, plus a buffer for
 #     re-slicing, and never more than REPRINT_MAX_GRAMS outright
+#
+# RESLICE_BUFFER and REPRINT_MAX_GRAMS are deliberately NOT in the published
+# policy, which states only the under-100g rule. Eboard's reasoning: publishing
+# an exact allowance means every reprint is sliced to exactly that figure,
+# whereas undocumented slack only ever helps the honest case where re-slicing
+# comes out slightly heavier. So the code being more generous than the written
+# policy here is intended -- don't "fix" it by removing the buffer.
 #   * free reprints stay within REPRINT_SHARE_CAP of the member's Forge
 #     filament for the semester
 # Only gram-measured resources qualify, so resin, vinyl and ink are excluded.
