@@ -25,6 +25,25 @@ from .verifications import create_email_token
 
 router = APIRouter()
 
+
+def highest_priority_display_role(roles: list[Role]) -> str:
+    """Name of the highest-priority role that is marked as a display role.
+
+    models/role.py defines the displayed role as "the highest priority role
+    with display_role set", and priority is higher-wins. Picking the first
+    matching role instead meant whichever role happened to be assigned first
+    won, so a user who was made a Room Manager before being made Treasurer
+    showed as Room Manager while holding Treasurer's permissions.
+
+    Returns "" when the user has no display role, matching what the endpoints
+    returned before and the `str | None` on the response models.
+    """
+    display_roles = [role for role in roles if role.display_role]
+    if not display_roles:
+        return ""
+    return max(display_roles, key=lambda role: role.priority).name
+
+
 async def get_semester_balance(
     session: DBSession,
     user_id: UUID,
@@ -146,13 +165,7 @@ async def get_user_by_rcsid(
         gender_identity=user.gender_identity,
         pronouns=user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(user.roles),
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
@@ -190,13 +203,7 @@ async def get_user_by_rin(
         gender_identity=user.gender_identity,
         pronouns=user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(user.roles),
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
@@ -296,13 +303,7 @@ async def get_all_users(
             gender_identity=user.gender_identity,
             pronouns=user.pronouns,
             permissions=user_permissions[user.id],
-            display_role=next((
-                    role.name 
-                    for role in user.roles 
-                    if role.display_role
-                ), 
-                ""
-            ),
+            display_role=highest_priority_display_role(user.roles),
             is_graduating=user.is_graduating,
             is_email_verified=user.is_email_verified,
             checked_graduating=user.checked_graduating,
@@ -353,13 +354,7 @@ async def edit_user_graduation(
         gender_identity=current_user.gender_identity,
         pronouns=current_user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in current_user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(current_user.roles),
         is_graduating=current_user.is_graduating,
         checked_graduating=current_user.checked_graduating,
         is_email_verified=current_user.is_email_verified,
@@ -428,13 +423,7 @@ async def get_users_by_role(
             gender_identity=user.gender_identity,
             pronouns=user.pronouns,
             permissions=user_permissions[user.id],
-            display_role=next((
-                    role.name 
-                    for role in user.roles 
-                    if role.display_role
-                ), 
-                ""
-            ),
+            display_role=highest_priority_display_role(user.roles),
             is_graduating=user.is_graduating,
             is_email_verified=user.is_email_verified,
             checked_graduating=user.checked_graduating,
