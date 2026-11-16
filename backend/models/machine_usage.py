@@ -43,6 +43,16 @@ class MachineUsage(Base):
 
     is_reprint: Mapped[bool] = mapped_column(default=False, server_default="false")
 
+    # The failed usage this reprint replaces. Required to enforce the reprint
+    # policy: without it there is no way to tell whether a failure has already
+    # been reprinted, or how much material the failed print actually used.
+    reprint_of_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("machine_usages.id", name="fk_reprint_of"), nullable=True
+    )
+    reprint_of: Mapped[Optional["MachineUsage"]] = relationship(
+        remote_side="MachineUsage.id", foreign_keys=[reprint_of_id]
+    )
+
     cost: Mapped[Decimal] = mapped_column(DECIMAL(precision=10, scale=5))
 
     resources_used: Mapped[list["ResourceUsageQuantity"]] = relationship(
