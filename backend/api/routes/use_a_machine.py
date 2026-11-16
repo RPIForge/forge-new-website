@@ -36,6 +36,10 @@ router = APIRouter()
 # The reprint is no larger than the failed print, plus a small allowance for re-slicing, and never more than 105g.
 # Free reprints stay within 25% of your Forge filament for the semester, counting this one.
 
+# The re-slice allowance and the 105g ceiling are deliberately absent from the
+# published policy, which states only the under-100g rule, so that nobody slices
+# to exactly the limit. The code being more generous here is intended, not a bug.
+
 GRAM_UNITS = {"g", "gram", "grams"}
 FAILED_PRINT_MAX_GRAMS = Decimal("100")
 RESLICE_BUFFER = Decimal("1.15")
