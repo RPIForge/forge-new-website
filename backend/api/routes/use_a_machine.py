@@ -25,35 +25,16 @@ from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
+# Reprint Policy
 
-# ---------------------------------------------------------------------------
-# Reprint policy
-# ---------------------------------------------------------------------------
-# A failed print earns one free reprint, subject to four limits:
-#   * the failed print used Forge filament, not the member's own
-#   * it used less than FAILED_PRINT_MAX_GRAMS
-#   * the reprint claims no more than the failed print did, plus a buffer for
-#     re-slicing, and never more than REPRINT_MAX_GRAMS outright
-#
-# RESLICE_BUFFER and REPRINT_MAX_GRAMS are deliberately NOT in the published
-# policy, which states only the under-100g rule. Eboard's reasoning: publishing
-# an exact allowance means every reprint is sliced to exactly that figure,
-# whereas undocumented slack only ever helps the honest case where re-slicing
-# comes out slightly heavier. So the code being more generous than the written
-# policy here is intended -- don't "fix" it by removing the buffer.
-#   * free reprints stay within REPRINT_SHARE_CAP of the member's Forge
-#     filament for the semester
-# Only gram-measured resources qualify, so resin, vinyl and ink are excluded.
-#
-# Not qualifying is not an error: the usage is still recorded as a reprint and
-# simply charged as a normal print, which is what the written policy says
-# ("You will be charged the full amount for the reprint"). reprint_of_id is
-# set only when the reprint was actually free, so a charged reprint neither
-# consumes the failure's one free reprint nor counts against the 25% cap.
-#
-# These are the numbers eboard set; they are constants so they can be changed
-# in one place.
-# ---------------------------------------------------------------------------
+# A reprint is free only if all of these hold:
+
+# The reprint uses Forge filament, measured in grams. Personal filament, resin, vinyl and ink never qualify.
+# You have a failed print that hasn’t already been reprinted. Each failure earns one free reprint, and once claimed it’s spent.
+# That failed print used Forge filament, not your own.
+# That failed print used under 100g. Exactly 100g does not qualify.
+# The reprint is no larger than the failed print, plus a small allowance for re-slicing, and never more than 105g.
+# Free reprints stay within 25% of your Forge filament for the semester, counting this one.
 
 GRAM_UNITS = {"g", "gram", "grams"}
 FAILED_PRINT_MAX_GRAMS = Decimal("100")
