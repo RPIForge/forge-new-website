@@ -62,10 +62,6 @@ async def create_token(
 
 SENDER_ADDRESS = "DoNotReply@notifications.rpiforge.dev"
 
-# Accent matches #d40000 in VerifyEmail.scss / ResetPassword.scss, so the email
-# looks like it belongs to the page it sends people to.
-_ACCENT = "#d40000"
-
 # Per-token-type copy. The wording matters as much as the markup here: a bare
 # link with no sender, no context and no "ignore this if it wasn't you" line is
 # what makes a legitimate transactional email read as phishing.
@@ -109,10 +105,19 @@ _EMAIL_CONTENT = {
 def _render_email(copy, url, first_name):
     """Build the plain-text and HTML bodies for a token email.
 
-    Both are sent: plain text for clients that don't render HTML, and HTML so
-    the message reads as a real email from The Forge rather than an unexplained
-    link. Styles are inline and there are no remote images, since blocked
-    images make a message look more suspicious, not less.
+    The HTML mirrors the new UI's auth pages, which are where these links land:
+    the navy-to-red gradient backdrop from AuthLayout's Page, a white card with
+    AuthLayout's 4px navy border and 10px radius, AuthTitle's centred Funnel
+    Display heading, a red call to action matching .btn-action--red, and the
+    navy footer bar from Footer.scss. Colours are the globals.scss tokens
+    (--color-navy #111c36, --color-navy-mid #2d4a80, --color-red #a51c1c,
+    --color-slate #64748b, --color-ice #e8edf5, --color-steel-blue #7a90aa).
+
+    Everything is inline and table-based because email clients strip <style>
+    blocks and Outlook renders through Word, which has no flexbox or grid. The
+    gradient is a background-image over a solid background-color so clients
+    that can't do gradients still get the navy. There are no remote images:
+    blocked images make a message look more suspicious, not less.
     """
     greeting = f"Hi {first_name}," if first_name else "Hi,"
 
@@ -128,34 +133,74 @@ def _render_email(copy, url, first_name):
         "This is an automated message; replies to this address aren't monitored."
     )
 
+    # Funnel Display and Familjen Grotesk are the new UI's fonts. Most clients
+    # ignore the stylesheet link, so every rule keeps a Helvetica/Arial fallback.
+    body_font = "'Funnel Display','Helvetica Neue',Helvetica,Arial,sans-serif"
+    head_font = "'Familjen Grotesk','Helvetica Neue',Helvetica,Arial,sans-serif"
+
     html = (
-        '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f5;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+        '<!DOCTYPE html><html><head>'
+        '<meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800'
+        '&family=Familjen+Grotesk:wght@400..700&display=swap" rel="stylesheet">'
+        '</head>'
+        f'<body bgcolor="#2d4a80" style="margin:0;padding:0;background-color:#2d4a80;font-family:{body_font};">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"'
-        ' style="background:#f4f4f5;padding:24px 12px;"><tr><td align="center">'
+        ' bgcolor="#2d4a80" style="background-color:#2d4a80;'
+        'background-image:linear-gradient(to left,#2d4a80 10%,#a51c1c 100%);padding:32px 12px;">'
+        '<tr><td align="center">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"'
-        ' style="max-width:560px;background:#ffffff;border:1px solid #e4e4e7;border-radius:8px;">'
-        '<tr><td style="padding:20px 28px;border-bottom:1px solid #e4e4e7;">'
-        f'<span style="font-size:15px;font-weight:700;letter-spacing:0.08em;color:{_ACCENT};">THE FORGE</span>'
-        '<span style="font-size:13px;color:#71717a;"> &middot; Rensselaer Polytechnic Institute</span>'
+        ' bgcolor="#ffffff" style="max-width:560px;background-color:#ffffff;'
+        'border:4px solid #111c36;border-radius:10px;">'
+
+        # Wordmark header
+        '<tr><td align="center" style="padding:24px 28px 0;">'
+        f'<div style="font-family:{head_font};font-size:17px;font-weight:700;'
+        'letter-spacing:0.12em;color:#111c36;">THE FORGE</div>'
+        f'<div style="font-family:{body_font};font-size:12px;color:#64748b;padding-top:4px;">'
+        'Rensselaer Polytechnic Institute</div>'
         '</td></tr>'
-        '<tr><td style="padding:28px;">'
-        f'<h1 style="margin:0 0 16px;font-size:19px;font-weight:600;color:#18181b;">{copy["heading"]}</h1>'
-        f'<p style="margin:0 0 18px;font-size:15px;line-height:1.55;color:#3f3f46;">{greeting} {copy["lede"]}</p>'
-        f'<p style="margin:0 0 24px;"><a href="{url}"'
-        f' style="display:inline-block;background:{_ACCENT};color:#ffffff;text-decoration:none;'
-        f'font-size:15px;font-weight:600;padding:12px 24px;border-radius:6px;">{copy["action"]}</a></p>'
-        '<p style="margin:0 0 6px;font-size:13px;color:#52525b;">Or copy this link into your browser:</p>'
-        f'<p style="margin:0 0 24px;font-size:12px;word-break:break-all;">'
-        f'<a href="{url}" style="color:{_ACCENT};">{url}</a></p>'
-        f'<p style="margin:0 0 8px;font-size:13px;color:#52525b;">This link expires in {copy["expiry"]}.</p>'
-        f'<p style="margin:0;font-size:13px;color:#52525b;">{copy["ignore"]}</p>'
+
+        # Red rule, standing in for AuthLayout's divider image
+        '<tr><td style="padding:16px 28px 0;">'
+        '<div style="height:4px;line-height:4px;font-size:0;background-color:#a51c1c;">&nbsp;</div>'
         '</td></tr>'
-        '<tr><td style="padding:16px 28px;border-top:1px solid #e4e4e7;font-size:12px;'
-        'line-height:1.5;color:#71717a;">'
-        "Sent by The Forge, RPI's student-run makerspace. This is an automated message; "
+
+        # Body
+        '<tr><td style="padding:24px 28px 28px;">'
+        f'<h1 style="margin:0 0 16px;font-family:{body_font};font-weight:700;font-size:26px;'
+        f'line-height:1.2;color:#111c36;text-align:center;">{copy["heading"]}</h1>'
+        f'<p style="margin:0 0 24px;font-family:{body_font};font-size:16px;line-height:1.55;'
+        f'color:#111c36;">{greeting} {copy["lede"]}</p>'
+        f'<div style="text-align:center;margin:0 0 24px;"><a href="{url}"'
+        f' style="display:inline-block;background-color:#a51c1c;color:#ffffff;text-decoration:none;'
+        f'font-family:{body_font};font-size:16px;font-weight:600;padding:13px 26px;'
+        f'border-radius:8px;">{copy["action"]}</a></div>'
+        f'<p style="margin:0 0 6px;font-family:{body_font};font-size:13px;color:#64748b;">'
+        'Or copy this link into your browser:</p>'
+        f'<p style="margin:0 0 24px;font-family:{body_font};font-size:12px;word-break:break-all;">'
+        f'<a href="{url}" style="color:#2d4a80;">{url}</a></p>'
+        f'<div style="height:1px;line-height:1px;font-size:0;background-color:#e2e8f0;'
+        'margin:0 0 20px;">&nbsp;</div>'
+        f'<p style="margin:0 0 8px;font-family:{body_font};font-size:13px;line-height:1.5;'
+        f'color:#64748b;">This link expires in {copy["expiry"]}.</p>'
+        f'<p style="margin:0;font-family:{body_font};font-size:13px;line-height:1.5;'
+        f'color:#64748b;">{copy["ignore"]}</p>'
+        '</td></tr>'
+
+        # Navy footer bar, matching Footer.scss
+        '<tr><td bgcolor="#111c36" style="background-color:#111c36;padding:18px 28px;'
+        'border-radius:0 0 6px 6px;">'
+        f'<div style="font-family:{head_font};font-size:12px;font-weight:700;'
+        'letter-spacing:0.08em;color:#e8edf5;">THE FORGE</div>'
+        f'<div style="font-family:{body_font};font-size:12px;line-height:1.5;color:#7a90aa;'
+        'padding-top:4px;">'
+        "RPI's student-run makerspace. This is an automated message; "
         "replies to this address aren't monitored."
-        '</td></tr></table></td></tr></table></body></html>'
+        '</div></td></tr>'
+
+        '</table></td></tr></table></body></html>'
     )
 
     return plain_text, html
