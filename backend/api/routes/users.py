@@ -27,17 +27,6 @@ router = APIRouter()
 
 
 def highest_priority_display_role(roles: list[Role]) -> str:
-    """Name of the highest-priority role that is marked as a display role.
-
-    models/role.py defines the displayed role as "the highest priority role
-    with display_role set", and priority is higher-wins. Picking the first
-    matching role instead meant whichever role happened to be assigned first
-    won, so a user who was made a Room Manager before being made Treasurer
-    showed as Room Manager while holding Treasurer's permissions.
-
-    Returns "" when the user has no display role, matching what the endpoints
-    returned before and the `str | None` on the response models.
-    """
     display_roles = [role for role in roles if role.display_role]
     if not display_roles:
         return ""
