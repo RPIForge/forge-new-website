@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
-from schemas.responses import MachineUsageSchema, ResourceInfo, ResourceSlotSchema
+from schemas.responses import MachineUsageResult, MachineUsageSchema, ResourceInfo, ResourceSlotSchema
 
 from ..utils import has_permissions_any
 from models.machine import Machine
@@ -29,13 +29,21 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Reprint policy
 # ---------------------------------------------------------------------------
-# A failed print earns one free reprint, subject to three limits:
-#   * the failed print used less than FAILED_PRINT_MAX_GRAMS
+# A failed print earns one free reprint, subject to four limits:
+#   * the failed print used Forge filament, not the member's own
+#   * it used less than FAILED_PRINT_MAX_GRAMS
 #   * the reprint claims no more than the failed print did, plus a buffer for
 #     re-slicing, and never more than REPRINT_MAX_GRAMS outright
-#   * reprints stay within REPRINT_SHARE_CAP of the member's gram total for
-#     the semester
+#   * free reprints stay within REPRINT_SHARE_CAP of the member's Forge
+#     filament for the semester
 # Only gram-measured resources qualify, so resin, vinyl and ink are excluded.
+#
+# Not qualifying is not an error: the usage is still recorded as a reprint and
+# simply charged as a normal print, which is what the written policy says
+# ("You will be charged the full amount for the reprint"). reprint_of_id is
+# set only when the reprint was actually free, so a charged reprint neither
+# consumes the failure's one free reprint nor counts against the 25% cap.
+#
 # These are the numbers eboard set; they are constants so they can be changed
 # in one place.
 # ---------------------------------------------------------------------------
@@ -47,13 +55,18 @@ REPRINT_MAX_GRAMS = Decimal("105")
 REPRINT_SHARE_CAP = Decimal("0.25")
 
 
-def _gram_total(quantities: list[ResourceUsageQuantity]) -> Decimal:
-    """Grams across the gram-measured resources in a set of usage quantities."""
+def _forge_gram_total(quantities: list[ResourceUsageQuantity]) -> Decimal:
+    """Grams of Forge filament in a set of usage quantities.
+
+    Personal filament is excluded: the policy only covers Forge material, both
+    for what qualifies and for the 25% the cap is measured against.
+    """
     return sum(
         (
             quantity.amount
             for quantity in quantities
             if quantity.resource is not None
+            and not quantity.is_own_material
             and quantity.resource.units.strip().lower() in GRAM_UNITS
         ),
         Decimal(0),
@@ -63,9 +76,9 @@ def _gram_total(quantities: list[ResourceUsageQuantity]) -> Decimal:
 async def _semester_gram_totals(
     session, user_id: UUID, semester_id: UUID | None
 ) -> tuple[Decimal, Decimal]:
-    """(all grams, reprinted grams) for this member in this semester."""
+    """(Forge filament grams, free-reprint grams) for this member this semester."""
 
-    def _sum(reprints_only: bool):
+    def _sum(free_reprints_only: bool):
         query = (
             select(func.coalesce(func.sum(ResourceUsageQuantity.amount), 0))
             .join(
@@ -75,40 +88,41 @@ async def _semester_gram_totals(
             .join(Resource, Resource.id == ResourceUsageQuantity.resource_id)
             .where(MachineUsage.user_id == user_id)
             .where(MachineUsage.semester_id == semester_id)
+            .where(ResourceUsageQuantity.is_own_material.is_(False))
             .where(func.lower(func.trim(Resource.units)).in_(GRAM_UNITS))
         )
-        if reprints_only:
-            query = query.where(MachineUsage.is_reprint.is_(True))
+        if free_reprints_only:
+            # Only reprints that were actually granted for free. A reprint the
+            # member paid for shouldn't eat into their allowance.
+            query = query.where(MachineUsage.reprint_of_id.is_not(None))
         return query
 
     total = await session.scalar(_sum(False))
-    reprinted = await session.scalar(_sum(True))
-    return Decimal(total or 0), Decimal(reprinted or 0)
+    free_reprinted = await session.scalar(_sum(True))
+    return Decimal(total or 0), Decimal(free_reprinted or 0)
 
 
-async def resolve_free_reprint(
+async def evaluate_free_reprint(
     session,
     current_user: User,
     semester_id: UUID | None,
     requested_quantities: list[ResourceUsageQuantity],
-) -> MachineUsage:
-    """Find the failed usage this reprint is claiming against.
+) -> tuple[MachineUsage | None, str | None]:
+    """Decide whether this reprint is free.
 
-    Raises HTTPException with the specific reason when the member isn't
-    entitled, so the form can say why rather than just refusing.
+    Returns (failed usage being claimed, None) when it is free, or
+    (None, reason) when it is charged. The reason names the actual numbers so
+    the form can explain the charge rather than just applying it silently.
     """
-    requested_grams = _gram_total(requested_quantities)
+    charged = "Charged as a normal print: "
+    requested_grams = _forge_gram_total(requested_quantities)
 
     if requested_grams <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "Free reprints only apply to filament. This usage doesn't record "
-                "any material measured in grams."
-            ),
+        return None, (
+            charged + "free reprints only cover Forge filament measured in grams."
         )
 
-    # Failures that haven't already been reprinted.
+    # Failures that haven't already earned a free reprint.
     already_claimed = select(MachineUsage.reprint_of_id).where(
         MachineUsage.reprint_of_id.is_not(None)
     )
@@ -128,64 +142,62 @@ async def resolve_free_reprint(
     ).all()
 
     if not candidates:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "You have no failed print to reprint. Either nothing of yours has "
-                "failed, or the failure has already been reprinted."
-            ),
+        return None, (
+            charged + "you have no failed print left to claim. Either nothing of "
+            "yours has failed, or the failure already earned its free reprint."
         )
 
-    # Most recent failure that was small enough to qualify.
+    # Most recent failure that used Forge filament and was small enough.
     eligible = None
     largest_seen = Decimal(0)
+    any_forge_filament = False
     for candidate in candidates:
-        failed_grams = _gram_total(candidate.resources_used)
+        failed_grams = _forge_gram_total(candidate.resources_used)
+        if failed_grams <= 0:
+            continue
+        any_forge_filament = True
         largest_seen = max(largest_seen, failed_grams)
-        if 0 < failed_grams < FAILED_PRINT_MAX_GRAMS:
+        if failed_grams < FAILED_PRINT_MAX_GRAMS:
             eligible = (candidate, failed_grams)
             break
 
+    if not any_forge_filament:
+        return None, (
+            charged + "your failed print used personal filament, which the free "
+            "reprint doesn't cover."
+        )
+
     if eligible is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"A free reprint only covers failed prints under "
-                f"{FAILED_PRINT_MAX_GRAMS:.0f}g. Your most recent unclaimed "
-                f"failure used {largest_seen:.1f}g."
-            ),
+        return None, (
+            charged + f"a free reprint only covers failed prints under "
+            f"{FAILED_PRINT_MAX_GRAMS:.0f}g, and your most recent unclaimed "
+            f"failure used {largest_seen:.1f}g."
         )
 
     failed_usage, failed_grams = eligible
 
     allowance = min(failed_grams * RESLICE_BUFFER, REPRINT_MAX_GRAMS)
     if requested_grams > allowance:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"A reprint can use up to {allowance:.1f}g, based on the "
-                f"{failed_grams:.1f}g that failed. This usage is "
-                f"{requested_grams:.1f}g."
-            ),
+        return None, (
+            charged + f"a free reprint covers up to {allowance:.1f}g based on the "
+            f"{failed_grams:.1f}g that failed, and this print is "
+            f"{requested_grams:.1f}g."
         )
 
-    total_grams, reprinted_grams = await _semester_gram_totals(
+    total_grams, free_reprinted = await _semester_gram_totals(
         session, current_user.id, semester_id
     )
     new_total = total_grams + requested_grams
-    new_reprinted = reprinted_grams + requested_grams
+    new_reprinted = free_reprinted + requested_grams
     if new_total > 0 and new_reprinted > new_total * REPRINT_SHARE_CAP:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Free reprints are capped at "
-                f"{REPRINT_SHARE_CAP * 100:.0f}% of your filament for the semester. "
-                f"This would put you at {new_reprinted:.1f}g of {new_total:.1f}g."
-            ),
+        return None, (
+            charged + f"free reprints are capped at "
+            f"{REPRINT_SHARE_CAP * 100:.0f}% of your Forge filament for the "
+            f"semester, and this would put you at {new_reprinted:.1f}g of "
+            f"{new_total:.1f}g."
         )
 
-    return failed_usage
-
+    return failed_usage, None
 
 
 @router.get("/use/{machine_id}/schema")
@@ -389,12 +401,14 @@ async def use_a_machine(
             total_cost += usage_info.amount * resource_used.cost
 
     reprint_of = None
+    reprint_note = None
     if request.is_reprint:
-        reprint_of = await resolve_free_reprint(
+        reprint_of, reprint_note = await evaluate_free_reprint(
             session, current_user, current_semester.id if current_semester else None,
             resource_usage_quantities,
         )
-        total_cost = 0
+        if reprint_of is not None:
+            total_cost = 0
 
     machine_usage = MachineUsage(
         machine=machine,
@@ -423,3 +437,9 @@ async def use_a_machine(
     )
     session.add(audit_log)
     await session.commit()
+
+    return MachineUsageResult(
+        cost=total_cost,
+        free_reprint=reprint_of is not None,
+        reprint_note=reprint_note,
+    )

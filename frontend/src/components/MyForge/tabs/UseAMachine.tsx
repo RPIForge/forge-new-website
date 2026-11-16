@@ -187,13 +187,22 @@ export const DynamicMachineForm: React.FC = () => {
         console.log("Usage Data:", usageData);
 
         try {
-            const response = await OmniAPI.use(selectedMachineId, usageData);
-            console.log("Usage Response:", response);
-            if (response == null) {
+            const result = await OmniAPI.use(selectedMachineId, usageData);
+            console.log("Usage Response:", result);
+            // Getting here means the API accepted it: OmniAPI.use throws on any
+            // non-200, so there is nothing further to check.
+            if (result?.reprint_note) {
+                // Marked as a reprint but it didn't qualify for a free one. The
+                // usage is logged and charged, so this is a warning rather than
+                // an error, and it stays on screen long enough to be read.
+                updateStatus(result.reprint_note, "error");
+                window.setTimeout(() => navigate('../../status'), 6000);
+            } else if (result?.free_reprint) {
+                updateStatus("Usage submitted. Your free reprint was applied.", "success");
+                window.setTimeout(() => navigate('../../status'), 2000);
+            } else {
                 updateStatus("Usage submitted successfully.", "success");
                 window.setTimeout(() => navigate('../../status'), 1000);
-            } else {
-                throw new Error("An error occurred. Please try again.");
             }
 
         } catch (error: any) {

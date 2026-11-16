@@ -23,6 +23,19 @@ class AccessTokenResponse(BaseResponse):
     issued_at: int
     
 
+class MachineUsageResult(BaseResponse):
+    """Outcome of logging a usage.
+
+    reprint_note is set when a usage was marked as a reprint but didn't qualify
+    for a free one, explaining why it was charged. Not qualifying isn't an
+    error, so the charge has to be explained in the success path.
+    """
+
+    cost: Decimal
+    free_reprint: bool = False
+    reprint_note: Optional[str] = None
+
+
 class VerificationTokenResponse(BaseResponse):
     token_type: str
     success: bool
