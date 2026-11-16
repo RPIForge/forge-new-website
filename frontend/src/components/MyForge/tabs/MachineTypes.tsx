@@ -39,6 +39,7 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, mach: MachineT
 
     const [resourceSlotIDS, setResourceSlotIDS] = useState<string[]>([]);
     const [cost, setCost] = useState<number>(0.0);
+    const [allowsFreeReprints, setAllowsFreeReprints] = useState(false);
     const handleCheckboxChange = (value: string) => {
         setResourceSlotIDS(prev =>
             prev.includes(value)
@@ -57,10 +58,12 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, mach: MachineT
             setName(mach.name);
             setResourceSlotIDS(mach.resource_slot_ids);
             setCost(mach.cost_per_hour);
+            setAllowsFreeReprints(!!mach.allows_free_reprints);
         } else {
             setName("");
             setResourceSlotIDS([]);
             setCost(0);
+            setAllowsFreeReprints(false);
         }
         if (isDialogOpen != state) setIsDialogOpen(state);
     };
@@ -81,6 +84,7 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, mach: MachineT
                 .filter(r => resourceSlotIDS.includes(r.id))
                 .map(r => r.id),
             cost_per_hour: cost.toString(),
+            allows_free_reprints: allowsFreeReprints,
         }).then(() => {
             refresh();
             setOpenExtra(false, null);
@@ -104,6 +108,7 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, mach: MachineT
                 .filter(r => resourceSlotIDS.includes(r.id))
                 .map(r => r.id),
             cost_per_hour: cost.toString(),
+            allows_free_reprints: allowsFreeReprints,
         }).then(() => {
             refresh();
             setOpenExtra(false, null);
@@ -148,6 +153,18 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, mach: MachineT
 
                                 <label className="Label" htmlFor="cost">Cost</label>
                                 <input className="Input" placeholder={cost + ""} id="cost" type="number" value={cost} min={0} pattern="[0-9]*" onChange={e => setCost(Math.max(0, e.target.valueAsNumber))} />
+
+                                <div className="CheckboxRow">
+                                    <input
+                                        id="allows_free_reprints"
+                                        type="checkbox"
+                                        checked={allowsFreeReprints}
+                                        onChange={e => setAllowsFreeReprints(e.target.checked)}
+                                    />
+                                    <label className="Label" htmlFor="allows_free_reprints">
+                                        Failed prints on this machine type can earn a free reprint
+                                    </label>
+                                </div>
                             </fieldset>
                             <Dialog.Close asChild>
                                 <button className="Button SaveBtn" onClick={machineType == null ? create : edit}>Save</button>

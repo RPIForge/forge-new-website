@@ -62,6 +62,7 @@ async def create_machine_type(
         name=request.name,
         resource_slots=resource_slots,
         cost_per_hour=request.cost_per_hour,
+        allows_free_reprints=request.allows_free_reprints,
     )
     session.add(new_machine_type)
     await session.commit()
@@ -265,11 +266,17 @@ async def edit_machine_type(
             if float(machine_type.cost_per_hour) != float(request.cost_per_hour)
             else None
         ),
+        "allows_free_reprints": (
+            request.allows_free_reprints
+            if machine_type.allows_free_reprints != request.allows_free_reprints
+            else None
+        ),
     }
 
     machine_type.name = request.name
     machine_type.resource_slots = list(resource_slots)
     machine_type.cost_per_hour = Decimal(request.cost_per_hour)
+    machine_type.allows_free_reprints = request.allows_free_reprints
 
     audit_log = AuditLog(
         type=LogType.MACHINE_TYPE_EDITED,

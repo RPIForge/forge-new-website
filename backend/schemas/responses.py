@@ -188,6 +188,7 @@ class MachineTypeInfo(BaseModel):
     resource_slot_names: set[str]
     resource_slot_ids: list[UUID4]
     cost_per_hour: Decimal
+    allows_free_reprints: bool = False
 
 
 class MachineTypeDetails(MachineTypeInfo):

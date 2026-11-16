@@ -179,6 +179,7 @@ class MachineTypeEditRequest(BaseRequest):
     name: str
     resource_slot_ids: list[UUID4]
     cost_per_hour: Decimal = Field(max_digits=10, decimal_places=5)
+    allows_free_reprints: bool = False
 
 
 class MachineCreateRequest(BaseRequest):
@@ -213,6 +214,7 @@ class MachineTypeCreateRequest(BaseRequest):
     name: str
     resource_slot_ids: list[UUID4]
     cost_per_hour: Decimal = Field(max_digits=10, decimal_places=5)
+    allows_free_reprints: bool = False
 
 
 class GetChargeSheetsRequest(BaseRequest):

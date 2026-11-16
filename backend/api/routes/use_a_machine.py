@@ -29,6 +29,9 @@ router = APIRouter()
 
 # A reprint is free only if all of these hold:
 
+# The machine is a type eboard has marked as eligible. The policy covers the
+#   Prusa printers only, and gating on the material alone cannot tell a Prusa
+#   from any other filament machine.
 # The reprint uses Forge filament, measured in grams. Personal filament, resin, vinyl and ink never qualify.
 # You have a failed print that hasn’t already been reprinted. Each failure earns one free reprint, and once claimed it’s spent.
 # That failed print used Forge filament, not your own.
@@ -99,6 +102,7 @@ async def evaluate_free_reprint(
     current_user: User,
     semester_id: UUID | None,
     requested_quantities: list[ResourceUsageQuantity],
+    machine: Machine,
 ) -> tuple[MachineUsage | None, str | None]:
     """Decide whether this reprint is free.
 
@@ -107,6 +111,12 @@ async def evaluate_free_reprint(
     the form can explain the charge rather than just applying it silently.
     """
     charged = "Charged as a normal print: "
+
+    if not machine.type.allows_free_reprints:
+        return None, (
+            charged + "free reprints don't apply to this kind of machine."
+        )
+
     requested_grams = _forge_gram_total(requested_quantities)
 
     if requested_grams <= 0:
@@ -127,7 +137,8 @@ async def evaluate_free_reprint(
             .options(
                 selectinload(MachineUsage.resources_used).selectinload(
                     ResourceUsageQuantity.resource
-                )
+                ),
+                selectinload(MachineUsage.machine).selectinload(Machine.type),
             )
             .order_by(MachineUsage.failed_at.desc().nullslast())
         )
@@ -139,31 +150,46 @@ async def evaluate_free_reprint(
             "yours has failed, or the failure already earned its free reprint."
         )
 
-    # Most recent failure that used Forge filament and was small enough.
+    # Most recent failure that qualifies. Candidates are newest first, so when
+    # none qualify we report why the newest one didn't -- that is the failure
+    # the member is most likely asking about.
     eligible = None
-    largest_seen = Decimal(0)
-    any_forge_filament = False
+    rejected = None  # (kind, grams) for the newest non-qualifying failure
     for candidate in candidates:
+        # A failure on, say, the resin printer earns nothing anywhere. Switching
+        # between eligible machines is fine, which is what #25 asked for.
+        if candidate.machine is None or not candidate.machine.type.allows_free_reprints:
+            rejected = rejected or ("machine", Decimal(0))
+            continue
         failed_grams = _forge_gram_total(candidate.resources_used)
         if failed_grams <= 0:
+            rejected = rejected or ("own_material", Decimal(0))
             continue
-        any_forge_filament = True
-        largest_seen = max(largest_seen, failed_grams)
         if failed_grams < FAILED_PRINT_MAX_GRAMS:
             eligible = (candidate, failed_grams)
             break
-
-    if not any_forge_filament:
-        return None, (
-            charged + "your failed print used personal filament, which the free "
-            "reprint doesn't cover."
-        )
+        rejected = rejected or ("too_large", failed_grams)
 
     if eligible is None:
+        kind, grams = rejected or ("none", Decimal(0))
+        if kind == "too_large":
+            return None, (
+                charged + f"a free reprint only covers failed prints under "
+                f"{FAILED_PRINT_MAX_GRAMS:.0f}g, and your most recent unclaimed "
+                f"failure used {grams:.1f}g."
+            )
+        if kind == "own_material":
+            return None, (
+                charged + "your failed print used personal filament, which the "
+                "free reprint doesn't cover."
+            )
+        if kind == "machine":
+            return None, (
+                charged + "your failed print was on a kind of machine that "
+                "doesn't earn free reprints."
+            )
         return None, (
-            charged + f"a free reprint only covers failed prints under "
-            f"{FAILED_PRINT_MAX_GRAMS:.0f}g, and your most recent unclaimed "
-            f"failure used {largest_seen:.1f}g."
+            charged + "you have no failed print left to claim."
         )
 
     failed_usage, failed_grams = eligible
@@ -397,7 +423,7 @@ async def use_a_machine(
     if request.is_reprint:
         reprint_of, reprint_note = await evaluate_free_reprint(
             session, current_user, current_semester.id if current_semester else None,
-            resource_usage_quantities,
+            resource_usage_quantities, machine,
         )
         if reprint_of is not None:
             total_cost = 0

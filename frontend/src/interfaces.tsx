@@ -83,6 +83,7 @@ export interface MachineType {
     resource_slots: number;
     count: number;
     cost_per_hour: number;
+    allows_free_reprints: boolean;
     resource_slot_ids: string[];
     resource_types: string[];
 };
