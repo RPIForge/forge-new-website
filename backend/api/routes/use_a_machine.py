@@ -263,7 +263,7 @@ async def use_a_machine(
     current_user: Annotated[
         User, Depends(PermittedUserChecker({Permissions.CAN_USE_MACHINES}))
     ],
-):
+) -> MachineUsageResult:
     """Log a machine usage for the provided machine ID."""
 
     machine = await session.scalar(
