@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload, InstrumentedAttribute
 from models.state import State
 
 from ..deps import DBSession, PermittedUserChecker
-from ..utils import get_user_permissions
+from ..utils import get_user_permissions, highest_priority_display_role
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
@@ -24,13 +24,6 @@ from core.security import get_password_hash
 from .verifications import create_email_token
 
 router = APIRouter()
-
-
-def highest_priority_display_role(roles: list[Role]) -> str:
-    display_roles = [role for role in roles if role.display_role]
-    if not display_roles:
-        return ""
-    return max(display_roles, key=lambda role: role.priority).name
 
 
 async def get_semester_balance(
