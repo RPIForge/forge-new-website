@@ -52,6 +52,9 @@ class UserChargeResponse(BaseResponse):
     first_name: str
     last_name: str
     semester_balance: Decimal = Field(max_digits=10, decimal_places=2)
+    # The part of semester_balance that came from exceeding the free-reprint
+    # allowance, so the charge can be explained rather than just applied.
+    reprint_overage: Decimal = Field(default=Decimal(0), max_digits=10, decimal_places=2)
 
     @field_validator("semester_balance", mode="before")
     @classmethod
@@ -89,6 +92,9 @@ class UserNoHash(BaseModel):
     checked_graduating: UUID4 | None
 
     semester_balance: Decimal = Field(max_digits=10, decimal_places=2)
+    # The part of semester_balance that came from exceeding the free-reprint
+    # allowance, so the charge can be explained rather than just applied.
+    reprint_overage: Decimal = Field(default=Decimal(0), max_digits=10, decimal_places=2)
 
     @field_validator("semester_balance", mode="before")
     @classmethod

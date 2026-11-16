@@ -42,6 +42,7 @@ export interface UserCharge {
     first_name: string;
     last_name: string;
     semester_balance: string | number;
+    reprint_overage: string | number;
     is_graduating: boolean;
 }
 
