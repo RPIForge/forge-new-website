@@ -198,17 +198,25 @@ export const DynamicMachineForm: React.FC = () => {
 
         } catch (error: any) {
             const detail: string = error?.response?.data?.detail ?? error?.detail ?? "";
-            if (error.status == 409 && /maintenance/i.test(detail)) {
+            // Read the status off the response first: AxiosError only gained a
+            // top-level .status in a later 1.x, and package.json allows ^1.7.9.
+            const httpStatus = error?.response?.status ?? error?.status;
+            if (httpStatus == 400 && typeof detail === "string" && detail) {
+                // Usage rules (the reprint policy, resource slot checks) reject with
+                // a message written for the person submitting, so show it as-is
+                // rather than burying it behind "an error occurred".
+                updateStatus(detail, "error");
+            } else if (httpStatus == 409 && /maintenance/i.test(detail)) {
                 updateStatus("This machine is under maintenance and can't be used right now.", "error");
-            } else if (error.status == 409 && /disabled/i.test(detail)) {
+            } else if (httpStatus == 409 && /disabled/i.test(detail)) {
                 updateStatus("This machine is disabled and can't be used.", "error");
-            } else if (error.status == 409) {
+            } else if (httpStatus == 409) {
                 updateStatus("This machine is already in use. Please clear it before submitting a new usage.", "error");
-            } else if (error.status == 404) {
+            } else if (httpStatus == 404) {
                 updateStatus("The selected machine does not exist.", "error");
-            } else if (error.status == 403) {
+            } else if (httpStatus == 403) {
                 updateStatus("You are not permitted to use this machine.", "error");
-            } else if (error.status == 422) {
+            } else if (httpStatus == 422) {
                 const problems = Array.isArray(error?.response?.data?.detail)
                     ? error.response.data.detail.map((d: any) => `${(d.loc ?? []).slice(1).join(' → ')}: ${d.msg}`).join('; ')
                     : detail;
