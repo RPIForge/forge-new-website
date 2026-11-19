@@ -139,14 +139,8 @@ const UserRoles: React.FC = () => {
         if (!selectedRoleId) return;
 
         // Granting replaces the member's existing role instead of adding to
-        // it, so say which role is about to be taken away.
-        if (activeUser.display_role && activeUser.display_role !== selectedRoleName) {
-            const confirmed = window.confirm(
-                `${activeUser.first_name} ${activeUser.last_name} is currently ${activeUser.display_role}.`
-                + ` Giving them ${selectedRoleName} will replace that role, since a member holds one at a time.`
-            );
-            if (!confirmed) return;
-        }
+        // it. No confirmation here -- the Current Role column already shows
+        // what is about to be replaced, and assigning roles is routine.
 
         OmniAPI.edit('users', 'role', {
             user_id: activeUser.id,
