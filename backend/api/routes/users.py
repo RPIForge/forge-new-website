@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload, InstrumentedAttribute
 from models.state import State
 
 from ..deps import DBSession, PermittedUserChecker
-from ..utils import get_user_permissions, highest_priority_display_role
+from ..utils import get_base_role, get_user_permissions, highest_priority_display_role
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
@@ -424,6 +424,30 @@ async def get_users_by_role(
     ]
 
 
+async def _log_role_change(
+    session: DBSession,
+    user: User,
+    changed_by: User,
+    granted: Role | None,
+    removed: list[Role],
+):
+    """Record a role change. Roles now replace each other, so the role a
+    member used to hold is only recoverable from this log."""
+    session.add(user)
+    session.add(
+        AuditLog(
+            type=LogType.USER_EDITED,
+            content={
+                "user_rcsid": user.RCSID,
+                "changed_by_rcsid": changed_by.RCSID,
+                "role_granted": granted.name if granted else None,
+                "roles_removed": [role.name for role in removed],
+            },
+        )
+    )
+    await session.commit()
+
+
 @router.post("/users/role")
 async def change_user_role(
     request: UserAddRoleRequest,
@@ -450,22 +474,60 @@ async def change_user_role(
             detail="Role with provided ID not found",
         )
 
+    # A member holds exactly one role at a time. Roles are cumulative by
+    # priority -- a higher role grants everything the ones below it do, plus
+    # more -- so granting one replaces whatever the member had rather than
+    # stacking on top of it, and the display name follows automatically.
+    previous_roles = list(user.roles)
+
     if request.should_have_role:
         if not user.is_email_verified:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot grant roles to unverified users",
             )
-        if role not in user.roles:
-            user.roles.append(role)
-            session.add(user)
-            await session.commit()
+
+        replaced = [existing for existing in previous_roles if existing.id != role.id]
+
+        # Granting now takes a role away as well, so an officer who can change
+        # roles could demote a superuser by handing them a lesser one. Only
+        # another superuser may do that.
+        loses_superuser = Permissions.IS_SUPERUSER not in role.permissions and any(
+            Permissions.IS_SUPERUSER in existing.permissions for existing in replaced
+        )
+        if loses_superuser:
+            actor_permissions = await get_user_permissions(session, current_user.id)
+            if Permissions.IS_SUPERUSER not in actor_permissions:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only a superuser can replace a superuser's role",
+                )
+
+        if not replaced and role in previous_roles:
+            return
+
+        user.roles = [role]
+        await _log_role_change(session, user, current_user, role, replaced)
         return
 
-    if role in user.roles:
-        user.roles.remove(role)
-        session.add(user)
-        await session.commit()
+    if role not in previous_roles:
+        return
+
+    # Taking a role away must not leave a member with none at all, or they
+    # lose the ability to use a machine entirely. Fall back to the base role.
+    base_role = await get_base_role(session)
+    remaining = [existing for existing in previous_roles if existing.id != role.id]
+    if not remaining and base_role is not None and base_role.id != role.id:
+        remaining = [base_role]
+
+    user.roles = remaining
+    await _log_role_change(
+        session,
+        user,
+        current_user,
+        remaining[0] if remaining else None,
+        [role],
+    )
 
 # GET ALL USERS
 
