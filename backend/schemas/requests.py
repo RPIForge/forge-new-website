@@ -128,7 +128,10 @@ class MachineFailRequest(BaseRequest):
     machine_id: UUID4
     error_message: str
     noticeable_fault: str
-    percentage: Decimal = Field(ge=0, le=100)
+    # Optional: when a print is found past its expected finish time there is no
+    # reliable way to know where it actually failed, so the volunteer may leave
+    # this blank and the failure email then omits the percentage entirely.
+    percentage: Decimal | None = Field(default=None, ge=0, le=100)
 
 
 class ResourceCreateRequest(BaseRequest):
