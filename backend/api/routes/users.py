@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload, InstrumentedAttribute
 from models.state import State
 
 from ..deps import DBSession, PermittedUserChecker
-from ..utils import get_user_permissions
+from ..utils import get_user_permissions, highest_priority_display_role
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
@@ -24,6 +24,7 @@ from core.security import get_password_hash
 from .verifications import create_email_token
 
 router = APIRouter()
+
 
 async def get_semester_balance(
     session: DBSession,
@@ -146,13 +147,7 @@ async def get_user_by_rcsid(
         gender_identity=user.gender_identity,
         pronouns=user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(user.roles),
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
@@ -190,13 +185,7 @@ async def get_user_by_rin(
         gender_identity=user.gender_identity,
         pronouns=user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(user.roles),
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
@@ -296,13 +285,7 @@ async def get_all_users(
             gender_identity=user.gender_identity,
             pronouns=user.pronouns,
             permissions=user_permissions[user.id],
-            display_role=next((
-                    role.name 
-                    for role in user.roles 
-                    if role.display_role
-                ), 
-                ""
-            ),
+            display_role=highest_priority_display_role(user.roles),
             is_graduating=user.is_graduating,
             is_email_verified=user.is_email_verified,
             checked_graduating=user.checked_graduating,
@@ -353,13 +336,7 @@ async def edit_user_graduation(
         gender_identity=current_user.gender_identity,
         pronouns=current_user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in current_user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(current_user.roles),
         is_graduating=current_user.is_graduating,
         checked_graduating=current_user.checked_graduating,
         is_email_verified=current_user.is_email_verified,
@@ -428,13 +405,7 @@ async def get_users_by_role(
             gender_identity=user.gender_identity,
             pronouns=user.pronouns,
             permissions=user_permissions[user.id],
-            display_role=next((
-                    role.name 
-                    for role in user.roles 
-                    if role.display_role
-                ), 
-                ""
-            ),
+            display_role=highest_priority_display_role(user.roles),
             is_graduating=user.is_graduating,
             is_email_verified=user.is_email_verified,
             checked_graduating=user.checked_graduating,
