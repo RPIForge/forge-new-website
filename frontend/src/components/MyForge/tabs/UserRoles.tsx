@@ -10,7 +10,7 @@ import Table, { ITEMS_PER_PAGE, TableHead } from '../components/Table';
 
 import '../styles/TabStyles.scss';
 
-type RoleUserRow = Pick<User, 'id' | 'first_name' | 'last_name' | 'RCSID'>;
+type RoleUserRow = Pick<User, 'id' | 'first_name' | 'last_name' | 'RCSID' | 'display_role'>;
 
 const UserRoles: React.FC = () => {
     const { hasPermission } = useAuth();
@@ -58,6 +58,7 @@ const UserRoles: React.FC = () => {
                     first_name: activeUser.first_name,
                     last_name: activeUser.last_name,
                     RCSID: activeUser.RCSID,
+                    display_role: activeUser.display_role,
                 })));
             })
             .catch(() => setAssignedUsers([]));
@@ -76,6 +77,7 @@ const UserRoles: React.FC = () => {
                     first_name: activeUser.first_name,
                     last_name: activeUser.last_name,
                     RCSID: activeUser.RCSID,
+                    display_role: activeUser.display_role,
                 })));
             })
             .catch(() => {
@@ -110,6 +112,14 @@ const UserRoles: React.FC = () => {
         const activeUser = assignedUsers[index_real];
         if (!activeUser || !selectedRoleId) return;
 
+        // A member holds one role at a time, so taking this one away drops
+        // them to the base member role rather than leaving them with none.
+        const confirmed = window.confirm(
+            `Remove the ${selectedRoleName} role from ${activeUser.first_name} ${activeUser.last_name}?`
+            + ' They will fall back to the base member role.'
+        );
+        if (!confirmed) return;
+
         OmniAPI.edit('users', 'role', {
             user_id: activeUser.id,
             role_id: selectedRoleId,
@@ -127,6 +137,10 @@ const UserRoles: React.FC = () => {
             return;
         }
         if (!selectedRoleId) return;
+
+        // Granting replaces the member's existing role instead of adding to
+        // it. No confirmation here -- the Current Role column already shows
+        // what is about to be replaced, and assigning roles is routine.
 
         OmniAPI.edit('users', 'role', {
             user_id: activeUser.id,
@@ -266,6 +280,7 @@ const UserRoles: React.FC = () => {
                                                 <th>First Name</th>
                                                 <th>Last Name</th>
                                                 <th>RCSID</th>
+                                                <th>Current Role</th>
                                                 <th></th>
                                             </tr>
                                         </thead>
@@ -275,6 +290,7 @@ const UserRoles: React.FC = () => {
                                                     <td>{activeUser.first_name}</td>
                                                     <td>{activeUser.last_name}</td>
                                                     <td>{activeUser.RCSID}</td>
+                                                    <td>{activeUser.display_role || '-'}</td>
                                                     <td style={{ textAlign: 'center' }}>
                                                          {!assignedUserIds.has(activeUser.id) && (
                                                             <button
@@ -289,7 +305,7 @@ const UserRoles: React.FC = () => {
                                                 </tr>
                                             )) : (
                                                 <tr>
-                                                    <td colSpan={4} style={{ textAlign: 'center' }}>No users are present.</td>
+                                                    <td colSpan={5} style={{ textAlign: 'center' }}>No users are present.</td>
                                                 </tr>
                                             )}
                                         </tbody>
