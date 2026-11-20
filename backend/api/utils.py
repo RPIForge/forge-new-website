@@ -30,24 +30,36 @@ async def get_user_permissions(session: AsyncSession, user_id: UUID):
             select(User).where(User.id == user_id).options(selectinload(User.roles))
         )
     ).one()
-    permission_set: Dict[Permissions, int] = {}
+    # Resolved in two passes. A single pass deleted a denied permission only
+    # if it was already in the set, so a denial was silently skipped whenever
+    # the denying role happened to be read before the granting one -- and the
+    # order roles come back in is arbitrary. Collecting every grant and every
+    # denial first makes the result depend on priority alone.
+    granted: Dict[Permissions, int] = {}
+    denied: Dict[Permissions, int] = {}
+
     for role in user.roles:
-        permissions = [Permissions(permission) for permission in role.permissions]
-        for permission in permissions:
-            if (
-                permission not in permission_set
-                or permission_set[permission] < role.priority
-            ):
-                permission_set[permission] = role.priority
+        for permission in role.permissions:
+            permission = Permissions(permission)
+            if permission not in granted or granted[permission] < role.priority:
+                granted[permission] = role.priority
 
         for inverse_permission in role.inverse_permissions:
+            inverse_permission = Permissions(inverse_permission)
             if (
-                inverse_permission in permission_set
-                and permission_set[inverse_permission] < role.priority
+                inverse_permission not in denied
+                or denied[inverse_permission] < role.priority
             ):
-                del permission_set[inverse_permission]
+                denied[inverse_permission] = role.priority
 
-    return set(permission_set.keys())
+    # A denial has to outrank the grant to take effect. Equal priority leaves
+    # the permission in place, which is what the previous implementation did
+    # when it worked, including for a role that both grants and denies one.
+    return {
+        permission
+        for permission, priority in granted.items()
+        if permission not in denied or denied[permission] <= priority
+    }
 
 
 async def has_permission(
