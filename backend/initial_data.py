@@ -9,7 +9,7 @@ import asyncio
 import logging
 from pydantic import SecretStr
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from tenacity import after_log, before_log, retry, stop_after_attempt, wait_fixed
 
 from core import security
@@ -18,6 +18,10 @@ from models.role import Role
 from models.state import State
 from models.user import User
 from schemas.enums import GenderStatsType, PronounType, Permissions
+
+# Rename the base role by changing this: the role is matched on its
+# permissions, so an existing one is renamed rather than duplicated.
+BASE_ROLE_NAME = "Member"
 
 
 async def main() -> None:
@@ -44,12 +48,41 @@ async def main() -> None:
         else:
             print("Superuser role already exists in database")
 
-        user_role = await session.scalar(select(Role).where(Role.name == "Default User"))
         MACHINE_USAGE_MINIMUM = [Permissions.CAN_USE_MACHINES, Permissions.CAN_SEE_MACHINES, Permissions.CAN_SEE_RESOURCE_SLOTS, Permissions.CAN_SEE_RESOURCES, Permissions.CAN_SEE_SEMESTERS]
+
+        # The base role is identified by its permissions, not its name --
+        # verifications.py finds it the same way when it grants the role on
+        # email verification. Matching on name alone meant renaming it here
+        # created a second role instead of renaming the existing one, and
+        # left the exact-permissions lookup matching two rows.
+        base_role_query = select(Role).where(
+            Role.permissions.op("@>")(MACHINE_USAGE_MINIMUM),
+            func.cardinality(Role.permissions) == len(MACHINE_USAGE_MINIMUM),
+        )
+        by_permissions = (await session.scalars(base_role_query)).all()
+
+        if len(by_permissions) > 1:
+            names = ", ".join(repr(role.name) for role in by_permissions)
+            print(
+                f"WARNING: {len(by_permissions)} roles have exactly the base "
+                f"permissions ({names}). Whichever one a newly verified member "
+                "gets is arbitrary. Merge them by hand, then re-run this."
+            )
+
+        user_role = await session.scalar(select(Role).where(Role.name == BASE_ROLE_NAME))
+
+        if not user_role and len(by_permissions) == 1:
+            # It exists under an older name: rename rather than duplicate.
+            user_role = by_permissions[0]
+            print(f"Renaming base role {user_role.name!r} to {BASE_ROLE_NAME!r}")
+            user_role.name = BASE_ROLE_NAME
+            session.add(user_role)
+            await session.commit()
+            await session.refresh(user_role)
 
         if not user_role:
             user_role = Role(
-                name="Default User",
+                name=BASE_ROLE_NAME,
                 permissions=MACHINE_USAGE_MINIMUM,
                 inverse_permissions=[],
                 display_role=True,
