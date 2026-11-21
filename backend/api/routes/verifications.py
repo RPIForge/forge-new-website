@@ -12,16 +12,14 @@ from sqlalchemy import select, func
 from core.config import settings
 from models.auth_token import AuthToken
 from models.user import User
-from models.role import Role
 from core.security import get_password_hash
-from schemas.enums import TokenType, Permissions
+from schemas.enums import TokenType
 from schemas.requests import VerificationTokenRequest, ResetPasswordRequest, ResetPasswordTokenRequest
 from schemas.responses import VerificationTokenResponse
 
 from ..deps import DBSession, PermittedUserChecker
+from ..utils import get_base_role
 
-
-MACHINE_USAGE_MINIMUM = [Permissions.CAN_USE_MACHINES, Permissions.CAN_SEE_MACHINES, Permissions.CAN_SEE_RESOURCE_SLOTS, Permissions.CAN_SEE_RESOURCES, Permissions.CAN_SEE_SEMESTERS]
 
 router = APIRouter()
 
@@ -272,15 +270,11 @@ async def verify_email_token(
 
     current_user.is_email_verified = True
 
-    # along with verification we also let them use machines
-    role = await session.scalar(
-        select(Role).where(
-            Role.permissions.op("@>")(MACHINE_USAGE_MINIMUM),
-            func.cardinality(Role.permissions) == len(MACHINE_USAGE_MINIMUM),
-        )
-    )
-
-    if (role):
+    # Along with verification we also let them use machines. Every verified
+    # member has the base role; appending it when they already have one
+    # would violate the association table's primary key.
+    role = await get_base_role(session)
+    if role is not None and role not in current_user.roles:
         current_user.roles.append(role)
         session.add(current_user)
 

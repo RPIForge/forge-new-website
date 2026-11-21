@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload, InstrumentedAttribute
 from models.state import State
 
 from ..deps import DBSession, PermittedUserChecker
-from ..utils import get_user_permissions, highest_priority_display_role
+from ..utils import get_base_role, get_user_permissions, highest_priority_display_role
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
@@ -462,10 +462,21 @@ async def change_user_role(
             await session.commit()
         return
 
-    if role in user.roles:
-        user.roles.remove(role)
-        session.add(user)
-        await session.commit()
+    if role not in user.roles:
+        return
+
+    user.roles.remove(role)
+
+    # Nobody is left with no role at all: without one they cannot use a
+    # machine, and email verification -- the only other thing that hands
+    # out the base role -- has already happened for them.
+    if not user.roles:
+        base_role = await get_base_role(session)
+        if base_role is not None:
+            user.roles.append(base_role)
+
+    session.add(user)
+    await session.commit()
 
 # GET ALL USERS
 

@@ -1,7 +1,7 @@
 from typing import Dict, Set
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -9,6 +9,35 @@ from sqlalchemy.orm import selectinload
 from models.role import Role
 from models.user import User
 from schemas.enums import Permissions
+
+
+# The permissions a member needs to use a machine at all. The role whose
+# permissions are exactly this set is the base role: every verified member
+# has it, and it is what someone falls back to when a role is taken away.
+# Matched on permissions rather than name so renaming the role is safe --
+# initial_data.py renames it in place for the same reason.
+MACHINE_USAGE_MINIMUM = [
+    Permissions.CAN_USE_MACHINES,
+    Permissions.CAN_SEE_MACHINES,
+    Permissions.CAN_SEE_RESOURCE_SLOTS,
+    Permissions.CAN_SEE_RESOURCES,
+    Permissions.CAN_SEE_SEMESTERS,
+]
+
+
+async def get_base_role(session: AsyncSession) -> Role | None:
+    """The base role every member holds, or None if no role matches.
+
+    None is possible on an empty database, or if someone edits the base
+    role's permissions so it no longer matches. Callers must handle it:
+    there is no sensible role to invent in its place.
+    """
+    return await session.scalar(
+        select(Role).where(
+            Role.permissions.op("@>")(MACHINE_USAGE_MINIMUM),
+            func.cardinality(Role.permissions) == len(MACHINE_USAGE_MINIMUM),
+        )
+    )
 
 
 def highest_priority_display_role(roles: list[Role]) -> str:
