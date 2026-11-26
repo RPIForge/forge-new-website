@@ -4,7 +4,7 @@ import HeroBanner from '../shared/HeroBanner';
 import MembershipBar from './MembershipBar';
 import Ruler from './Ruler';
 
-const HERO_IMAGE = '/anvil_with_benchys_right.png';
+const HERO_IMAGE = '/anvil_with_benchys_right.webp';
 
 const Page = styled.div`
     --nav-h: 65px;

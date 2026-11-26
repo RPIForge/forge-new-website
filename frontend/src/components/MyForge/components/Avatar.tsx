@@ -21,7 +21,7 @@ const Avatar : React.FC<AvatarData> = ({user, isNav}) => {
             </AvatarPrimitive.Fallback>
             {/* <AvatarPrimitive.Image // I wouldn't usually comment this out, but this will be used when we implement custom user icons.
                 className={navstr + "avatar-image"}
-                src="/TB_Logo.png" // replace this with user avatar later
+                src="/TB_Logo.webp" // replace this with user avatar later
                 alt="User Avatar"
             /> */}
         </AvatarPrimitive.Root>

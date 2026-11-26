@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
-import anvilImg from '../../assets/img/anvil_with_benchys.png';
+import anvilImg from '../../assets/img/anvil_with_benchys.webp';
 import dividerLine from '../../assets/img/auth-divider.svg?url';
 import Ruler from '../Home/Ruler';
 

@@ -3,9 +3,9 @@ import styled from 'styled-components';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import rulerMask from '../../assets/img/ruler-mask-tile.svg?url';
 import bgPattern from '../../assets/img/background.svg?url';
-import anvilDesktopImg from '../../assets/img/anvil_with_benchys_right.png';
-import anvilMobileImg from '../../assets/img/background_mobile_crop.png';
-import mobileBenchysImg from '../../assets/img/mobile_benchys.png';
+import anvilDesktopImg from '../../assets/img/anvil_with_benchys_right.webp';
+import anvilMobileImg from '../../assets/img/background_mobile_crop.webp';
+import mobileBenchysImg from '../../assets/img/mobile_benchys.webp';
 import PageRuler from './PageRuler';
 
 const colors = {
