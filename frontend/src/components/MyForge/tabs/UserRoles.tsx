@@ -134,8 +134,9 @@ const UserRoles: React.FC = () => {
                 `${selectedRoleName} is the base role every member needs.`
                 + ` Removing it leaves ${activeUser.first_name} ${activeUser.last_name}`
                 + ' unable to use a machine unless another of their roles grants it.'
-                + ` If ${selectedRoleName} is their only role they will keep it, since`
-                + ' nobody may be left with no role at all. Remove it anyway?'
+                + ` If ${selectedRoleName} is their only role the change will be`
+                + ' refused, since nobody may be left with no role at all.'
+                + ' Remove it anyway?'
             );
             if (!confirmed) return;
         }
@@ -146,8 +147,11 @@ const UserRoles: React.FC = () => {
             should_have_role: false,
         }).then(() => {
             fetchUsersForSelectedRole();
-        }).catch(() => {
-            alert('Failed to remove role from user');
+        }).catch((err) => {
+            // The backend refuses a removal that would leave the member with
+            // no role at all, and explains why. Show that rather than a
+            // generic failure.
+            alert(err?.response?.data?.detail ?? 'Failed to remove role from user');
         });
     };
 

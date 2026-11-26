@@ -472,8 +472,21 @@ async def change_user_role(
     # out the base role -- has already happened for them.
     if not user.roles:
         base_role = await get_base_role(session)
-        if base_role is not None:
-            user.roles.append(base_role)
+
+        if base_role is None or base_role.id == role.id:
+            # The role being removed IS the base role, so there is nothing
+            # to fall back to. Say so rather than silently re-adding it and
+            # leaving the caller to wonder why nothing happened.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"{user.first_name} {user.last_name} has no other role, so "
+                    f"removing {role.name} would leave them unable to use a "
+                    "machine. Give them another role first."
+                ),
+            )
+
+        user.roles.append(base_role)
 
     session.add(user)
     await session.commit()
