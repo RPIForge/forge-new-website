@@ -134,9 +134,8 @@ const UserRoles: React.FC = () => {
                 `${selectedRoleName} is the base role every member needs.`
                 + ` Removing it leaves ${activeUser.first_name} ${activeUser.last_name}`
                 + ' unable to use a machine unless another of their roles grants it.'
-                + ` If ${selectedRoleName} is their only role the change will be`
-                + ' refused, since nobody may be left with no role at all.'
-                + ' Remove it anyway?'
+                + ` If ${selectedRoleName} is their only role they will be left with`
+                + ' no roles and no permissions at all. Remove it anyway?'
             );
             if (!confirmed) return;
         }

@@ -467,26 +467,17 @@ async def change_user_role(
 
     user.roles.remove(role)
 
-    # Nobody is left with no role at all: without one they cannot use a
-    # machine, and email verification -- the only other thing that hands
-    # out the base role -- has already happened for them.
+    # Removing some other role should not cost a member the baseline they
+    # were given at verification, so they drop back to the base role rather
+    # than to nothing.
+    #
+    # Removing the BASE role is the deliberate case: it is how an account is
+    # shut out, so it is allowed to leave them with no roles and no
+    # permissions. Falling back here would make that impossible.
     if not user.roles:
         base_role = await get_base_role(session)
-
-        if base_role is None or base_role.id == role.id:
-            # The role being removed IS the base role, so there is nothing
-            # to fall back to. Say so rather than silently re-adding it and
-            # leaving the caller to wonder why nothing happened.
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"{user.first_name} {user.last_name} has no other role, so "
-                    f"removing {role.name} would leave them unable to use a "
-                    "machine. Give them another role first."
-                ),
-            )
-
-        user.roles.append(base_role)
+        if base_role is not None and base_role.id != role.id:
+            user.roles.append(base_role)
 
     session.add(user)
     await session.commit()
