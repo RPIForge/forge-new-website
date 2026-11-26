@@ -12,6 +12,22 @@ import '../styles/TabStyles.scss';
 
 type RoleUserRow = Pick<User, 'id' | 'first_name' | 'last_name' | 'RCSID'>;
 
+// The base role every member holds, identified by its permissions rather
+// than its name -- the same way the backend finds it in api/utils.py, so
+// renaming the role does not quietly disable the warning below.
+const MACHINE_USAGE_MINIMUM: UserPermission[] = [
+    UserPermission.CAN_USE_MACHINES,
+    UserPermission.CAN_SEE_MACHINES,
+    UserPermission.CAN_SEE_RESOURCE_SLOTS,
+    UserPermission.CAN_SEE_RESOURCES,
+    UserPermission.CAN_SEE_SEMESTERS,
+];
+
+const isBaseRole = (role: Role | undefined) =>
+    !!role
+    && role.permissions.length === MACHINE_USAGE_MINIMUM.length
+    && MACHINE_USAGE_MINIMUM.every((permission) => role.permissions.includes(permission));
+
 const UserRoles: React.FC = () => {
     const { hasPermission } = useAuth();
 
@@ -28,7 +44,8 @@ const UserRoles: React.FC = () => {
     const [addUsersPageData, setAddUsersPageData] = useState<RoleUserRow[]>([]);
     const [addUsersHasMore, setAddUsersHasMore] = useState(false);
     const [userSearchQuery, setUserSearchQuery] = useState('');
-    const selectedRoleName = allRoles.find((activeRole) => activeRole.id === selectedRoleId)?.name ?? 'Selected Role';
+    const selectedRole = allRoles.find((activeRole) => activeRole.id === selectedRoleId);
+    const selectedRoleName = selectedRole?.name ?? 'Selected Role';
 
     const fetchRoles = async () => {
         try {
@@ -110,14 +127,33 @@ const UserRoles: React.FC = () => {
         const activeUser = assignedUsers[index_real];
         if (!activeUser || !selectedRoleId) return;
 
+        // Taking the base role away removes permission to use a machine at
+        // all, which is not obvious from a table of names.
+        if (isBaseRole(selectedRole)) {
+            const confirmed = window.confirm(
+                `${selectedRoleName} is the base role every member needs.`
+                + ` Removing it leaves ${activeUser.first_name} ${activeUser.last_name}`
+                + ' unable to use a machine unless another of their roles grants it.'
+                + ` If ${selectedRoleName} is their only role they will be left with`
+                + ' no roles and no permissions at all. Remove it anyway?'
+            );
+            if (!confirmed) return;
+        }
+
         OmniAPI.edit('users', 'role', {
             user_id: activeUser.id,
             role_id: selectedRoleId,
             should_have_role: false,
         }).then(() => {
             fetchUsersForSelectedRole();
-        }).catch(() => {
-            alert('Failed to remove role from user');
+        }).catch((err) => {
+            // change_user_role refuses some removals outright -- a target
+            // holding roleChangeImmune, a role carrying lockout without
+            // canControlLockout, a role carrying isSuperuser -- and each
+            // refusal explains itself, so show that rather than a generic
+            // failure. Removing someone's last role is not one of them: that
+            // is allowed, and is how an account is shut out.
+            alert(err?.response?.data?.detail ?? 'Failed to remove role from user');
         });
     };
 

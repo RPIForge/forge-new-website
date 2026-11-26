@@ -1,7 +1,7 @@
 from typing import Dict, Set
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -9,6 +9,35 @@ from sqlalchemy.orm import selectinload
 from models.role import Role
 from models.user import User
 from schemas.enums import Permissions
+
+
+# The permissions a member needs to use a machine at all. The role whose
+# permissions are exactly this set is the base role: every verified member
+# has it, and it is what someone falls back to when a role is taken away.
+# Matched on permissions rather than name so renaming the role is safe --
+# initial_data.py renames it in place for the same reason.
+MACHINE_USAGE_MINIMUM = [
+    Permissions.CAN_USE_MACHINES,
+    Permissions.CAN_SEE_MACHINES,
+    Permissions.CAN_SEE_RESOURCE_SLOTS,
+    Permissions.CAN_SEE_RESOURCES,
+    Permissions.CAN_SEE_SEMESTERS,
+]
+
+
+async def get_base_role(session: AsyncSession) -> Role | None:
+    """The base role every member holds, or None if no role matches.
+
+    None is possible on an empty database, or if someone edits the base
+    role's permissions so it no longer matches. Callers must handle it:
+    there is no sensible role to invent in its place.
+    """
+    return await session.scalar(
+        select(Role).where(
+            Role.permissions.op("@>")(MACHINE_USAGE_MINIMUM),
+            func.cardinality(Role.permissions) == len(MACHINE_USAGE_MINIMUM),
+        )
+    )
 
 
 def highest_priority_display_role(roles: list[Role]) -> str:
@@ -30,24 +59,36 @@ async def get_user_permissions(session: AsyncSession, user_id: UUID):
             select(User).where(User.id == user_id).options(selectinload(User.roles))
         )
     ).one()
-    permission_set: Dict[Permissions, int] = {}
+    # Resolved in two passes. A single pass deleted a denied permission only
+    # if it was already in the set, so a denial was silently skipped whenever
+    # the denying role happened to be read before the granting one -- and the
+    # order roles come back in is arbitrary. Collecting every grant and every
+    # denial first makes the result depend on priority alone.
+    granted: Dict[Permissions, int] = {}
+    denied: Dict[Permissions, int] = {}
+
     for role in user.roles:
-        permissions = [Permissions(permission) for permission in role.permissions]
-        for permission in permissions:
-            if (
-                permission not in permission_set
-                or permission_set[permission] < role.priority
-            ):
-                permission_set[permission] = role.priority
+        for permission in role.permissions:
+            permission = Permissions(permission)
+            if permission not in granted or granted[permission] < role.priority:
+                granted[permission] = role.priority
 
         for inverse_permission in role.inverse_permissions:
+            inverse_permission = Permissions(inverse_permission)
             if (
-                inverse_permission in permission_set
-                and permission_set[inverse_permission] < role.priority
+                inverse_permission not in denied
+                or denied[inverse_permission] < role.priority
             ):
-                del permission_set[inverse_permission]
+                denied[inverse_permission] = role.priority
 
-    return set(permission_set.keys())
+    # A denial has to outrank the grant to take effect. Equal priority leaves
+    # the permission in place, which is what the previous implementation did
+    # when it worked, including for a role that both grants and denies one.
+    return {
+        permission
+        for permission, priority in granted.items()
+        if permission not in denied or denied[permission] <= priority
+    }
 
 
 async def has_permission(

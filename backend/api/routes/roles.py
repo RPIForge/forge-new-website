@@ -8,13 +8,42 @@ from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
 from models.role import Role
 from models.audit_log import AuditLog
-from schemas.enums import Permissions, LogType
+from schemas.enums import RESTRICTED_PERMISSIONS, Permissions, LogType
 from schemas.responses import CreateResponse, AuditLogModel, RoleInfo, RoleDetails
 from schemas.requests import RoleCreateRequest, RoleEditRequest, UserAddRoleRequest
 from ..deps import DBSession, PermittedUserChecker
+from ..utils import get_user_permissions
 from models.user import User
 
 router = APIRouter()
+
+
+RESTRICTED_NAMES = "IS_SUPERUSER, ROLE_CHANGE_IMMUNE, and LOCKOUT"
+
+
+async def _reject_restricted(session, current_user, *permission_lists, verb: str):
+    """Only superusers may put a restricted permission on a role.
+
+    RESTRICTED_PERMISSIONS has been defined since the permission enum was
+    written but was never checked, so anyone who could create or edit a role
+    could grant themselves IS_SUPERUSER through one.
+    """
+    touched = set()
+    for permissions in permission_lists:
+        touched |= {Permissions(permission) for permission in permissions}
+
+    if not touched & RESTRICTED_PERMISSIONS:
+        return
+
+    actor_permissions = await get_user_permissions(session, current_user.id)
+    if Permissions.IS_SUPERUSER in actor_permissions:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Only superusers can {verb} roles with {RESTRICTED_NAMES}",
+    )
+
 
 
 @router.post("/roles/new")
@@ -49,6 +78,10 @@ async def create_role(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="One or more inverse permissions are invalid",
         )
+
+    await _reject_restricted(
+        session, current_user, permissions, inverse_permissions, verb="create"
+    )
 
     new_role = Role(
         name=request.name,
@@ -185,6 +218,16 @@ async def edit_role(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="One or more inverse permissions are invalid",
         )
+
+    await _reject_restricted(
+        session,
+        current_user,
+        permissions,
+        inverse_permissions,
+        role.permissions,
+        role.inverse_permissions,
+        verb="edit",
+    )
 
     differences = {
         "name": request.name if role.name != request.name else None,

@@ -9,14 +9,14 @@ from sqlalchemy.orm import selectinload, InstrumentedAttribute
 from models.state import State
 
 from ..deps import DBSession, PermittedUserChecker
-from ..utils import get_user_permissions, highest_priority_display_role
+from ..utils import get_base_role, get_user_permissions, highest_priority_display_role
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
 from models.auth_token import AuthToken
 from models.role import Role
 from models.user import User
-from schemas.enums import LogType, Permissions, TokenType
+from schemas.enums import RESTRICTED_PERMISSIONS, LogType, Permissions, TokenType
 from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest, UserEditRequest, UserSelfEditRequest
 from schemas.responses import BasicUserResponse, UserNoHash
 
@@ -450,6 +450,56 @@ async def change_user_role(
             detail="Role with provided ID not found",
         )
 
+    # Damage-control permissions, enforced here for the first time. They have
+    # been defined since the enum was written but nothing checked them, so
+    # anyone who could change roles could hand out a lockout or strip one.
+    actor_permissions = await get_user_permissions(session, current_user.id)
+
+    if Permissions.IS_SUPERUSER not in actor_permissions:
+        target_permissions = await get_user_permissions(session, user.id)
+
+        if (
+            Permissions.ROLE_CHANGE_IMMUNE in target_permissions
+            and user.id != current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"{user.first_name} {user.last_name}'s roles can only be "
+                    "changed by themselves or a superuser"
+                ),
+            )
+
+        role_permissions = {
+            Permissions(permission)
+            for permission in [*role.permissions, *role.inverse_permissions]
+        }
+
+        # Checked before lockout: the superuser role carries every
+        # permission, lockout included, and "only a superuser can assign
+        # Super Admin" is the reason it is refused -- not canControlLockout.
+        superuser_only = (role_permissions & RESTRICTED_PERMISSIONS) - {
+            Permissions.LOCKOUT
+        }
+        if superuser_only:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Only a superuser can assign or remove {role.name}, "
+                    "because of the permissions it carries"
+                ),
+            )
+
+        if Permissions.LOCKOUT in role_permissions:
+            if Permissions.CAN_CONTROL_LOCKOUT not in actor_permissions:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Applying or removing a role that locks an account "
+                        "requires canControlLockout"
+                    ),
+                )
+
     if request.should_have_role:
         if not user.is_email_verified:
             raise HTTPException(
@@ -462,10 +512,25 @@ async def change_user_role(
             await session.commit()
         return
 
-    if role in user.roles:
-        user.roles.remove(role)
-        session.add(user)
-        await session.commit()
+    if role not in user.roles:
+        return
+
+    user.roles.remove(role)
+
+    # Removing some other role should not cost a member the baseline they
+    # were given at verification, so they drop back to the base role rather
+    # than to nothing.
+    #
+    # Removing the BASE role is the deliberate case: it is how an account is
+    # shut out, so it is allowed to leave them with no roles and no
+    # permissions. Falling back here would make that impossible.
+    if not user.roles:
+        base_role = await get_base_role(session)
+        if base_role is not None and base_role.id != role.id:
+            user.roles.append(base_role)
+
+    session.add(user)
+    await session.commit()
 
 # GET ALL USERS
 
