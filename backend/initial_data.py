@@ -23,9 +23,6 @@ from schemas.enums import GenderStatsType, PronounType, Permissions
 # permissions, so an existing one is renamed rather than duplicated.
 BASE_ROLE_NAME = "Member"
 
-# Holding this role disables an account. Nothing assigns it automatically.
-LOCKOUT_ROLE_NAME = "Lockout"
-
 
 async def main() -> None:
     print("Start initial data")
@@ -99,30 +96,6 @@ async def main() -> None:
             print("User role was created")
         else:
             print("User role already exists in database")
-
-        lockout_role = await session.scalar(
-            select(Role).where(Role.name == LOCKOUT_ROLE_NAME)
-        )
-
-        if not lockout_role:
-            # Inert until someone is given it. Holding it refuses the account
-            # at login (auth.py) and on every permission check (deps.py), and
-            # only someone with CAN_CONTROL_LOCKOUT may apply or remove it --
-            # no role carries that yet, so for now it is superusers only.
-            lockout_role = Role(
-                name=LOCKOUT_ROLE_NAME,
-                permissions=[Permissions.LOCKOUT],
-                inverse_permissions=[],
-                display_role=False,
-                priority=9000,
-            )
-
-            session.add(lockout_role)
-            await session.commit()
-
-            print("Lockout role was created")
-        else:
-            print("Lockout role already exists in database")
 
         user = await session.scalar(select(User).where(User.RCSID == "haddlg"))
 
