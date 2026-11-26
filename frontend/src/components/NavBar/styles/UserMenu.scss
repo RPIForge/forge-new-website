@@ -94,3 +94,31 @@
 .animate-pulse {
     animation: pulse 2s cubic-bezier(.4,0,.6,1) infinite
 }
+
+// A finger needs roughly 44px. The hamburger is 37x30, and on a phone it is the
+// only way to reach navigation at all, so it is worth growing rather than
+// overlaying: the mobile navbar is a fixed 56px tall, so a 44px trigger fits
+// inside it without moving anything. min-width is set on every trigger, not
+// just the hamburger, because the user menu is already wider than 44px and so
+// is unaffected -- this avoids needing :has() to tell the two apart. Centring
+// only shows on the hamburger, whose glyph would otherwise sit left in the
+// taller box; the user menu's own content still fills its width.
+@media (pointer: coarse) {
+    .user-trigger {
+        min-width: 44px;
+        min-height: 44px;
+        justify-content: center;
+    }
+
+    // Behind that trigger sits the whole of the site's navigation on a phone,
+    // in rows 31px tall. min-height rather than padding so the row is 44px
+    // whatever the font does; flex keeps the label centred in it. The 0.5rem
+    // gap between rows is left alone, which puts 52px between one link and
+    // the next.
+    .user-content .link,
+    .user-content .logout-button {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+    }
+}

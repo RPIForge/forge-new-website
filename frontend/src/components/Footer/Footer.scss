@@ -228,3 +228,26 @@
     margin-top: 0;
   }
 }
+
+// The footer's link column packs three separate destinations 27px apart (23px
+// tall, 4px between). That is half the ~44px a fingertip needs, and unlike the
+// table icons the gap is too small to widen the hit areas invisibly -- doing so
+// would make neighbours overlap, so a tap meant for one link would land on
+// another. These need real space, which costs the footer about 50px of height
+// on a phone. Nothing above the footer moves.
+@media (pointer: coarse) {
+  .footer-nav-link {
+    display: block;
+    padding: 11px 0;
+  }
+
+  // The address, email and phone links are 19px tall, and in a contact column
+  // the email and phone sit directly above one another -- so these cannot be
+  // widened invisibly either. The visually-hidden span inside the address link
+  // is positioned absolutely, so making the link a flex container ignores it.
+  .footer-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

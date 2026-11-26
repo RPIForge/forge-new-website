@@ -437,7 +437,8 @@
 // size and an invisible overlay extends the tappable area around it.
 //
 // The overlay is deliberately not a full 44px wide. Edit and trash sit ~28px
-// apart, so a 44px-wide target would make them overlap -- and in the contested
+// apart (18px glyph + the 10px margin Admin.scss sets, which outranks this
+// file), so a 44px-wide target would make them overlap -- and in the contested
 // strip the later button, delete, would win. A tap drifting off edit landing on
 // delete is worse than it landing on nothing, so the overlay stays narrower than
 // the gap and a few dead pixels are left between the two. Height is unconstrained.
@@ -452,7 +453,6 @@
     .icon .edit,
     .icon .trash {
         position: relative;
-        margin: 0 8px;
 
         &::after {
             content: '';

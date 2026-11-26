@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import useMediaQuery from '../../hooks/useMediaQuery';
 import rulerMask from '../../assets/img/ruler-mask-tile.svg?url';
 import bgPattern from '../../assets/img/background.svg?url';
 import anvilDesktopImg from '../../assets/img/anvil_with_benchys_right.png';
@@ -208,6 +209,13 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
     const isHero   = variant === 'hero';
     const isBanner = variant === 'banner';
 
+    // The media queries below already hide whichever anvil does not belong on
+    // this screen, but `display: none` only stops a CSS background-image from
+    // being fetched -- an <img> is downloaded either way. Both of these are
+    // <img> elements and ~400-460KB each, so on a phone they have to be kept
+    // out of the DOM, not merely hidden. Mirrors `breakpoints.mobile`.
+    const isMobile = useMediaQuery(`(max-width: ${breakpoints.mobile})`);
+
     return (
         <Root $variant={variant} className={className}>
 
@@ -216,7 +224,9 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
             {isHero && showAnvil && (
                 <>
                     <MobileAnvilBackground />
-                    <MobileBenchyScatter src={mobileBenchysImg} alt="" aria-hidden="true" />
+                    {isMobile && (
+                        <MobileBenchyScatter src={mobileBenchysImg} alt="" aria-hidden="true" />
+                    )}
                 </>
             )}
 
@@ -227,7 +237,7 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
                 {subtitle}
             </ContentColumn>
 
-            {isHero && showAnvil && (
+            {isHero && showAnvil && !isMobile && (
                 <DesktopImagePanel>
                     <img src={imageSrc ?? anvilDesktopImg} alt="The Forge makerspace tools and equipment" />
                 </DesktopImagePanel>
