@@ -1,6 +1,5 @@
 import styled from 'styled-components';
 import { grayDark, whiteA } from '@radix-ui/colors';
-import { machineSymbolUrl } from './machineSymbols';
 
 // Works for 90% of phones (With the settings for background and all that) Has some trouble with tablets
 const mobileBreakpoint = "850px";
@@ -48,7 +47,6 @@ const PROGRESS_IN_PROGRESS = 'rgba(255, 200, 0, 0.45)';  // yellow
 const PROGRESS_COMPLETED   = 'rgba(0, 200, 0, 0.35)';    // green
 
 export const Card = styled.div<{ 
-    $symbol?: string; 
     $minimized?: boolean; 
     $highlightFailed?: boolean; 
     $mode?: string;
@@ -75,15 +73,6 @@ export const Card = styled.div<{
     border: ${({ $minimized }) => ($minimized ? '1px solid #ccc' : '1px solid #999')};
     font-size: ${({ $minimized }) => ($minimized ? "2.5vh" : "3.0vh")};
     transition: all 0.3s ease-in-out;
-    ${props => {
-        const symbol = machineSymbolUrl(props.$symbol);
-        return symbol ? `
-        background-image: url("${symbol}");
-        background-size: auto 90%;
-        background-repeat: no-repeat;
-        background-position: center;
-    ` : '';
-    }}
     position: relative;
     &::before {
         content: '';
@@ -215,17 +204,9 @@ export const ListItem = styled.div`
     box-shadow: 1px 1px 4px 0px rgba(0, 0, 0, 0.5);
 
 `;
-export const ListIcon = styled.div<{ $symbol?: string }>`
+export const ListIcon = styled.div`
     height: 100%;
     aspect-ratio: 1 / 1;
-
-    ${props => {
-        const symbol = machineSymbolUrl(props.$symbol);
-        return symbol ? `background-image: url("${symbol}");` : '';
-    }}
-    background-size: auto 90%;
-    background-repeat: no-repeat;
-    background-position: center;
 `;
 export const ListInfo = styled.div`
     width: 30%;

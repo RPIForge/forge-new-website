@@ -155,7 +155,6 @@ const getStatusText = () => {
 
     return (
         <Card 
-            $symbol={name} 
             $minimized={$minimized} 
             $highlightFailed={$highlightFailed && failed}
             $mode={getMode(machine)}
