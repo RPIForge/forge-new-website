@@ -41,8 +41,6 @@ const clearDraft = () => {
 const blankSlot = (slotId: string): ResourceSlotElement => ({
     slot_id: slotId,
     name: "_",
-    brand: "_",
-    color: "_",
     amount: 0,
     own: false,
     cost: 0,
@@ -240,7 +238,11 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 2000);
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 1000);
+            if (slotValues.find((slot) => Number(slot.amount) > 1950)) {
+                updateStatus("Exceeding the amount of filament that is allowed on one print in the Forge", "error");
+                return;
+            }
             if (bigSlot) {
                 amountWarning = bigSlot.own
                     ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
@@ -249,7 +251,7 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if duration is valid
-        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0)) {
+        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0 || toCount(formData.hours) > 48 || toCount(formData.minutes) > 59)) {
             updateStatus("Please enter a valid duration.", "error");
             return;
         }
@@ -391,8 +393,6 @@ interface ResourceSlotElement {
     slot_id: string;
     resource_id?: string;
     name: string;
-    brand?: string;
-    color?: string;
     amount: number;
     own?: boolean;
     cost: number;
@@ -432,19 +432,15 @@ const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, value, setSlotValue, 
 
     const materialOptions = useMemo(() => [...new Set(validResources.map(r => r.name))], [validResources]);
 
-    const matchingResource = (name: string, brand: string, color: string) =>
-        validResources.find(r => r.name === name && (brand === "_" || r.brand === brand) && (color === "_" || r.color === color)) ?? null;
+    const matchingResource = (name: string) =>
+        validResources.find(r => r.name === name) ?? null;
 
     const handleChange = (event: ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
         const { name, value: raw, type } = event.target;
         const newValue = type === "checkbox" ? (event.target as HTMLInputElement).checked : raw;
 
         const updated: ResourceSlotElement = { ...value, [name]: newValue };
-        const validBrands = validResources.filter(r => r.name === updated.name).map(r => r.brand);
-        const validColors = validResources.filter(r => r.name === updated.name && r.brand === updated.brand).map(r => r.color);
-        if (name === "name" && !validBrands.includes(updated.brand)) updated.brand = "_";
-        if ((name === "name" || name === "brand") && !validColors.includes(updated.color)) updated.color = "_";
-        const resource = matchingResource(updated.name, updated.brand || "_", updated.color || "_");
+        const resource = matchingResource(updated.name);
         const unitCost = parseFloat(String(resource?.cost ?? "0"));
         const amount = Number(updated.amount);
         updated.resource_id = resource?.id;
@@ -454,7 +450,7 @@ const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, value, setSlotValue, 
 
     const cost = value.cost ?? 0;
     const selectedDetails = value;
-    const selected = matchingResource(selectedDetails.name, selectedDetails.brand || "_", selectedDetails.color || "_");
+    const selected = matchingResource(selectedDetails.name);
     const idBase = `slot-${slot.resource_slot_id}`;
 
     return (

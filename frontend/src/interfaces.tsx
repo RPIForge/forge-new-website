@@ -114,13 +114,13 @@ export interface MachineUsage {
     cost: number
     failed?: boolean
     failed_at?: string | null
+    // The usages table replaces the boolean with a Yes/No string for display.
+    is_reprint?: boolean | string
 };
 
 export interface Resource {
     id: string;
     name: string;
-    brand?: string;
-    color?: string;
     units: string;
     cost: number;
 };

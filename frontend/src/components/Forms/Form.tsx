@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 import './styles/Form.scss';
-import Majors from './data/sorted_majors.json';
+import Majors from '../../data/sorted_majors.json';
 
 interface FormElementProps {
     label?: string;

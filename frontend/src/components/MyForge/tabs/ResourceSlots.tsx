@@ -20,10 +20,10 @@ interface aemenuprops {
     refresh: () => void;
 }
 
-const resourceLabel = (r: Resource) => {
-    const extra = [r.brand, r.color].filter(Boolean).join(' ');
-    return extra ? `${r.name} (${extra})` : r.name;
-};
+// Resources used to be qualified by brand and colour; now that a resource is
+// unique on name and units, the units are what distinguish two same-named rows.
+const resourceLabel = (r: Resource) =>
+    r.units ? `${r.name} (${r.units})` : r.name;
 
 const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, rslot: ResourceSlot | null) => void] => {
     const { isDialogOpen, setIsDialogOpen, resourceSlot, setResourceSlot, refresh } = props;

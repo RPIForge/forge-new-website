@@ -15,7 +15,6 @@ const Register = lazy(() => import('./components/Forms/Register'));
 const VerifyEmail = lazy(() => import('./components/Forms/VerifyEmail'));
 const ResetPassword = lazy(() => import('./components/Forms/ResetPassword'));
 const ComingSoon = lazy(() => import('./components/Home/ComingSoon'));
-const NewStatus = lazy(() => import('./components/Status/Status'));
 const MyForge = lazy(() => import('./components/MyForge/MyForge'));
 const Admin = lazy(() => import('./components/Admin/Admin'));
 const Hours = lazy(() => import('./components/Hours/Hours'));
@@ -50,7 +49,7 @@ export default function App() {
                 <main className="page-content">
                 <Routes>
                     <Route path="/" Component={Home} />
-                    <Route path="/status" Component={NewStatus} />
+                    <Route path="/status" Component={Status} />
                     <Route path="/login" Component={Login} />
                     <Route path="/register" Component={Register} />
                     <Route path="/reset-password" Component={ResetPassword} />

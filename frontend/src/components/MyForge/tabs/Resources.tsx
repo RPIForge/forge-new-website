@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { useState } from 'react';
-import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE, ColumnDef, formatCell, usePagedList } from '../components/Table';
+import Table, { DeleteItem, TableHead, ITEMS_PER_PAGE, ColumnDef, usePagedList } from '../components/Table';
 import { Resource } from 'src/interfaces';
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { UserPermission } from 'src/enums';
@@ -29,8 +29,6 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
 
     const [name, setName] = useState("");
-    const [brand, setBrand] = useState("");
-    const [color, setColor] = useState("");
     const [units, setUnits] = useState("");
     const [cost, setCost] = useState<number | "">(0);
     const [busy, setBusy] = useState(false);
@@ -40,8 +38,6 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
         setError("");
         setResource(res);
         setName(res?.name ?? "");
-        setBrand(res?.brand ?? "");
-        setColor(res?.color ?? "");
         setUnits(res?.units ?? "");
         setCost(res?.cost != null ? Number(res.cost) : 0);
         if (isDialogOpen != state) setIsDialogOpen(state);
@@ -52,14 +48,14 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
             setError("You do not have the permissions to do this.");
             return;
         }
-        if (!name.trim() || !brand.trim() || !color.trim() || !units.trim() || cost === "") {
+        if (!name.trim() || !units.trim() || cost === "") {
             setError("All fields must be filled in.");
             return;
         }
         setBusy(true);
         setError("");
         try {
-            const body = { name: name.trim(), brand: brand.trim(), color: color.trim(), units: units.trim(), cost };
+            const body = { name: name.trim(), units: units.trim(), cost };
             if (resource) await OmniAPI.edit("resources", resource.id, body);
             else await OmniAPI.create("resources", body);
             refresh();
@@ -86,12 +82,6 @@ const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, res: Resource 
         >
             <AdminField label="Resource Name" htmlFor="resource-name">
                 <input id="resource-name" value={name} onChange={e => setName(e.target.value)} maxLength={100} required />
-            </AdminField>
-            <AdminField label="Resource Brand" htmlFor="resource-brand">
-                <input id="resource-brand" value={brand} onChange={e => setBrand(e.target.value)} maxLength={100} required />
-            </AdminField>
-            <AdminField label="Resource Color" htmlFor="resource-color">
-                <input id="resource-color" value={color} onChange={e => setColor(e.target.value)} maxLength={100} required />
             </AdminField>
             <AdminField label="Resource Units" htmlFor="resource-units">
                 <input id="resource-units" value={units} onChange={e => setUnits(e.target.value)} maxLength={16} placeholder="e.g. g" required />
@@ -122,8 +112,6 @@ const Resources: React.FC = () => {
 
     const columnDefs: ColumnDef<Resource>[] = [
         { key: 'name', label: 'Name', render: (r) => r.name },
-        { key: 'brand', label: 'Brand', render: (r) => formatCell(r.brand) },
-        { key: 'color', label: 'Color', render: (r) => formatCell(r.color) },
         { key: 'cost', label: 'Cost', render: (r) => `$${Number(r.cost).toFixed(2)} / ${r.units || 'unit'}` },
     ];
 

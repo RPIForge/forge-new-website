@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import Majors from './data/sorted_majors.json';
+import Majors from '../../data/sorted_majors.json';
 import AuthLayout, {
     AuthButtonRow,
     AuthCheck,
