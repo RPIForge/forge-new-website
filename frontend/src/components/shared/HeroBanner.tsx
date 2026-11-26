@@ -3,7 +3,6 @@ import styled from 'styled-components';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import rulerMask from '../../assets/img/ruler-mask-tile.svg?url';
 import bgPattern from '../../assets/img/background.svg?url';
-import anvilDesktopImg from '../../assets/img/anvil_with_benchys_right.webp';
 import anvilMobileImg from '../../assets/img/background_mobile_crop.webp';
 import mobileBenchysImg from '../../assets/img/mobile_benchys.webp';
 import PageRuler from './PageRuler';
@@ -26,7 +25,11 @@ export interface HeroBannerProps {
     subtitle?: React.ReactNode;
     variant?: 'hero' | 'banner';
     showAnvil?: boolean;
-    imageSrc?: string;
+    /**
+     * Required: the component used to carry its own default, which meant every
+     * page bundled that image whether or not it drew it.
+     */
+    imageSrc: string;
     ruler?: React.ReactNode;
     className?: string;
 }
@@ -177,13 +180,13 @@ const DesktopImagePanel = styled.div`
     }
 `;
 
-const BannerAnvilAccent = styled.div`
+const BannerAnvilAccent = styled.div<{ $img: string }>`
     position: absolute;
     right: 0;
     top: 0;
     bottom: 0;
     width: 45%;
-    background-image: url("${anvilDesktopImg}");
+    background-image: url("${p => p.$img}");
     background-size: contain;
     background-position: right center;
     background-repeat: no-repeat;
@@ -212,8 +215,9 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
     // The media queries below already hide whichever anvil does not belong on
     // this screen, but `display: none` only stops a CSS background-image from
     // being fetched -- an <img> is downloaded either way. Both of these are
-    // <img> elements and ~400-460KB each, so on a phone they have to be kept
-    // out of the DOM, not merely hidden. Mirrors `breakpoints.mobile`.
+    // <img> elements, and the desktop one is the page's largest asset, so on a
+    // phone it has to be kept out of the DOM, not merely hidden. Mirrors
+    // `breakpoints.mobile`.
     const isMobile = useMediaQuery(`(max-width: ${breakpoints.mobile})`);
 
     return (
@@ -230,7 +234,7 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
                 </>
             )}
 
-            {isBanner && showAnvil && <BannerAnvilAccent />}
+            {isBanner && showAnvil && <BannerAnvilAccent $img={imageSrc} />}
 
             <ContentColumn $variant={variant}>
                 <TitleBlock>{title}</TitleBlock>
@@ -239,7 +243,7 @@ const HeroBanner: React.FC<HeroBannerProps> = ({
 
             {isHero && showAnvil && !isMobile && (
                 <DesktopImagePanel>
-                    <img src={imageSrc ?? anvilDesktopImg} alt="The Forge makerspace tools and equipment" />
+                    <img src={imageSrc} alt="The Forge makerspace tools and equipment" />
                 </DesktopImagePanel>
             )}
 
