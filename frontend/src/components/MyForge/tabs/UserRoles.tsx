@@ -147,9 +147,12 @@ const UserRoles: React.FC = () => {
         }).then(() => {
             fetchUsersForSelectedRole();
         }).catch((err) => {
-            // The backend refuses a removal that would leave the member with
-            // no role at all, and explains why. Show that rather than a
-            // generic failure.
+            // change_user_role refuses some removals outright -- a target
+            // holding roleChangeImmune, a role carrying lockout without
+            // canControlLockout, a role carrying isSuperuser -- and each
+            // refusal explains itself, so show that rather than a generic
+            // failure. Removing someone's last role is not one of them: that
+            // is allowed, and is how an account is shut out.
             alert(err?.response?.data?.detail ?? 'Failed to remove role from user');
         });
     };
