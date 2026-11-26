@@ -10,7 +10,7 @@ from datetime import timedelta
 
 async def test_auth_access_token(client: AsyncClient, default_user: User):
     response = await client.post(
-        app.url_path_for("login_access_token"),
+        app.url_path_for("login_user"),
         data={
             "username": default_user_object.RCSID,
             "password": default_user_password,
@@ -28,7 +28,7 @@ async def test_auth_access_token(client: AsyncClient, default_user: User):
 async def test_auth_access_token_expires(client: AsyncClient, default_user: User):
     with freeze_time() as frozen_time:
         response = await client.post(
-            app.url_path_for("login_access_token"),
+            app.url_path_for("login_user"),
             data={
                 "username": default_user_object.RCSID,
                 "password": default_user_password,
@@ -41,7 +41,7 @@ async def test_auth_access_token_expires(client: AsyncClient, default_user: User
         frozen_time.tick(delta=timedelta(minutes=20))
 
         response = await client.get(
-            app.url_path_for("read_current_user"),
+            app.url_path_for("get_current_user"),
             headers={"Authorization": "Bearer " + token},
         )
         assert response.status_code == codes.FORBIDDEN
@@ -52,7 +52,7 @@ async def test_auth_access_token_expires(client: AsyncClient, default_user: User
 
 async def test_auth_access_token_fail_no_user(client: AsyncClient):
     response = await client.post(
-        app.url_path_for("login_access_token"),
+        app.url_path_for("login_user"),
         data={
             "username": "xxx",
             "password": "yyy",
@@ -60,15 +60,15 @@ async def test_auth_access_token_fail_no_user(client: AsyncClient):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    assert response.status_code == codes.BAD_REQUEST
-    assert response.json() == {"detail": "Incorrect email or password"}
+    assert response.status_code == codes.UNAUTHORIZED
+    assert response.json() == {"detail": "Incorrect username or password"}
 
 
 async def test_auth_access_token_fail_wrong_password(
     client: AsyncClient, default_user: User
 ):
     response = await client.post(
-        app.url_path_for("login_access_token"),
+        app.url_path_for("login_user"),
         data={
             "username": default_user_object.RCSID,
             "password": "yyy",
@@ -76,5 +76,5 @@ async def test_auth_access_token_fail_wrong_password(
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    assert response.status_code == codes.BAD_REQUEST
-    assert response.json() == {"detail": "Incorrect email or password"}
+    assert response.status_code == codes.UNAUTHORIZED
+    assert response.json() == {"detail": "Incorrect username or password"}
