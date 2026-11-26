@@ -1,5 +1,6 @@
 import styled from 'styled-components';
 import { grayDark, whiteA } from '@radix-ui/colors';
+import { machineSymbolUrl } from './machineSymbols';
 
 // Works for 90% of phones (With the settings for background and all that) Has some trouble with tablets
 const mobileBreakpoint = "850px";
@@ -74,12 +75,15 @@ export const Card = styled.div<{
     border: ${({ $minimized }) => ($minimized ? '1px solid #ccc' : '1px solid #999')};
     font-size: ${({ $minimized }) => ($minimized ? "2.5vh" : "3.0vh")};
     transition: all 0.3s ease-in-out;
-    ${props => props?.$symbol && `
-        background-image: url(src/assets/img/symbols/${props.$symbol}.svg);
+    ${props => {
+        const symbol = machineSymbolUrl(props.$symbol);
+        return symbol ? `
+        background-image: url("${symbol}");
         background-size: auto 90%;
         background-repeat: no-repeat;
         background-position: center;
-    `}
+    ` : '';
+    }}
     position: relative;
     &::before {
         content: '';
@@ -215,7 +219,10 @@ export const ListIcon = styled.div<{ $symbol?: string }>`
     height: 100%;
     aspect-ratio: 1 / 1;
 
-    background-image: url(src/assets/img/symbols/${props => props.$symbol}.svg);
+    ${props => {
+        const symbol = machineSymbolUrl(props.$symbol);
+        return symbol ? `background-image: url("${symbol}");` : '';
+    }}
     background-size: auto 90%;
     background-repeat: no-repeat;
     background-position: center;
