@@ -431,3 +431,37 @@
         outline-offset: 2px;
     }
 }
+
+// A finger needs roughly 44px; these icons are 18. Rather than grow the button
+// -- which would reflow the cell on every pointer device -- the glyph keeps its
+// size and an invisible overlay extends the tappable area around it.
+//
+// The overlay is deliberately not a full 44px wide. Edit and trash sit ~28px
+// apart, so a 44px-wide target would make them overlap -- and in the contested
+// strip the later button, delete, would win. A tap drifting off edit landing on
+// delete is worse than it landing on nothing, so the overlay stays narrower than
+// the gap and a few dead pixels are left between the two. Height is unconstrained.
+@media (pointer: coarse) {
+    // td carries overflow: hidden so long cell text ellipsizes. The icon cell has
+    // no text to clip, and at ~20px tall it would crop the overlay back to about
+    // the icon's own size, so let it through here.
+    td.icon {
+        overflow: visible;
+    }
+
+    .icon .edit,
+    .icon .trash {
+        position: relative;
+        margin: 0 8px;
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: calc(100% + 8px);
+            height: 44px;
+            transform: translate(-50%, -50%);
+        }
+    }
+}
