@@ -17,6 +17,7 @@ const ResetPassword = lazy(() => import('./components/Forms/ResetPassword'));
 const ComingSoon = lazy(() => import('./components/Home/ComingSoon'));
 const NewStatus = lazy(() => import('./components/Status/Status'));
 const MyForge = lazy(() => import('./components/MyForge/MyForge'));
+const Admin = lazy(() => import('./components/Admin/Admin'));
 const Hours = lazy(() => import('./components/Hours/Hours'));
 const Wiki = lazy(() => import('./components/Learn/Wiki'));
 const AboutUs = lazy(() => import('./components/AboutUs/AboutUs'));
@@ -74,9 +75,9 @@ export default function App() {
                     <Route path="/faq/etiquette" Component={ComingSoon} />
                     <Route path="/faq/materials" Component={ComingSoon} />
                     <Route path="/faq/about" Component={ComingSoon} />
-                    <Route path="/admin" element={
+                    <Route path="/admin/*" element={
                         <ProtectedRoute>
-                            <ComingSoon />
+                            <Admin />
                         </ProtectedRoute>
                     } />
 

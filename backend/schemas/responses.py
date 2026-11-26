@@ -207,7 +207,10 @@ class UsageResponse(BaseResponse):
     time_started: datetime
     duration: int
     machine_name: str
+    machine_type_name: str | None = None
     cost: Decimal
+    failed: bool = False
+    failed_at: Optional[datetime] = None
 
 
 class MachineInfo(BaseModel):

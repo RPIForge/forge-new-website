@@ -110,7 +110,10 @@ export interface MachineUsage {
     time_started: Date
     duration: number
     machine_name: string
+    machine_type_name?: string | null
     cost: number
+    failed?: boolean
+    failed_at?: string | null
 };
 
 export interface Resource {

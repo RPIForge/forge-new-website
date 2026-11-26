@@ -1,65 +1,66 @@
-import React, { useEffect, useState, ChangeEvent, FormEvent, ReactNode, Suspense, useMemo, createContext, useContext } from "react";
+import React, { useCallback, useEffect, useState, ChangeEvent, FormEvent, useMemo } from "react";
 import { OmniAPI } from "src/apis/OmniAPI";
-import { CheckboxInput, CustomForm, CustomFormField, DropdownInput, FormIcon, TextInput } from "src/components/Forms/Form";
-import { emptyMachine, Machine, Resource } from "src/interfaces";
-import { v4 as uuidv4 } from "uuid";
-import { useNavigate } from "react-router-dom"
-import '../../Forms/styles/Form.scss';
-import '../styles/UseAMachine.scss';
-import * as Select from '@radix-ui/react-select';
-import { ChevronDownIcon } from '@radix-ui/react-icons';
-import { AxiosError } from "axios";
+import { Machine, Resource } from "src/interfaces";
+import { useNavigate } from "react-router-dom";
 import useAuth from "src/components/Auth/useAuth";
 import { UserPermission } from "src/enums";
+import { AdminCheck, AdminField, AdminFormHeading } from "src/components/Admin/AdminForm";
+import dividerLine from '../../../assets/img/auth-divider.svg?url';
 
+import '../styles/UsageForm.scss';
 
-interface MachineSchemaResponse {
-    [key: string]: any;
+const LAST_PAGE = 4;
+
+// Keeps what's been typed if the page reloads or you leave and come back, until it's submitted
+const DRAFT_KEY = "machineUsageFormDraft";
+
+interface UsageDraft {
+    selectedMachineId: string;
+    formData: { [key: string]: any };
+    slotValues: ResourceSlotElement[];
+    page: number;
 }
 
-/** Database IDs specific to UsageForm Testing
- * Resource IDs:
- *   "acc18d23-19db-4c6e-b3c8-fdf79e19b6e6"
- *   "0897f0dc-eb66-41f2-b179-e76ced9aad69"
- *   "23fb8bf6-7d0c-4029-8810-f19fe85bfb38"
- *   "da36be80-2dcb-43a7-88b2-885e3ce387f6"
- *   "c96423f3-fbea-4993-8455-e929f333a820"
- *   "5a7c609b-df2f-48b4-9028-a0222a13b7a9"
- *   "fec63512-f7d3-46c9-a89a-c0f4e0b5c8b7"
- *   "f0f83ef1-a4c5-4fc9-8ff8-821c7658f7ad"
- *
- * Reource Slot IDs:
- *   "6fad9ba9-2093-40cc-81d4-5443bc8d06f8"
- *   "af30b008-1f52-4e77-91ec-67dc8d61fa75"
- *   "73cd77a0-1a74-4047-9c2c-ce08d1062963"
- * 
- * Machine Type IDs:
- *   "2cc65063-23a9-41b5-ab5a-fb451f6ef547"
- *
- * Machine Group IDs:
- *   "9d18bb70-cf67-4903-a78d-073722bb9ff2"
- *
- * Machine IDs:
- *   "d8aa3861-a1f3-4c1d-a154-018936173dc4"
-*/
+const loadDraft = (): UsageDraft | null => {
+    try {
+        const raw = sessionStorage.getItem(DRAFT_KEY);
+        return raw ? JSON.parse(raw) as UsageDraft : null;
+    } catch {
+        return null;
+    }
+};
+
+const saveDraft = (draft: UsageDraft) => {
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* storage unavailable */ }
+};
+
+const clearDraft = () => {
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ }
+};
+
+const blankSlot = (slotId: string): ResourceSlotElement => ({
+    slot_id: slotId,
+    name: "_",
+    brand: "_",
+    color: "_",
+    amount: 0,
+    own: false,
+    cost: 0,
+});
 
 export const DynamicMachineForm: React.FC = () => {
 
+    const [draft] = useState(loadDraft);
     const [machines, setMachines] = useState<Machine[]>([]);
-    const [selectedMachineId, setSelectedMachineId] = useState<string>("0");
+    const [selectedMachineId, setSelectedMachineId] = useState<string>(draft?.selectedMachineId ?? "0");
     const [schema, setSchema] = useState<MachineSchemaResponse>({});
-    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, org: false, reprint: false });
-    const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>([{
-        slot_id: "_",
-        name: "_",
-        brand: "_",
-        color: "_",
-        amount: 0,
-        own: false,
-        cost: 0,
-    }]);
-    const [resourceUsageForm, setResourceUsageForm] = useState<ReactNode>(null);
-    const [page, setPage] = useState<number>(1);
+    const [formData, setFormData] = useState<{ [key: string]: any }>(draft?.formData ?? { hours: 0, minutes: 0, policy: false, reprint: false });
+    const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>(draft?.slotValues ?? []);
+    const [page, setPage] = useState<number>(draft?.page ?? 1);
+
+    useEffect(() => {
+        saveDraft({ selectedMachineId, formData, slotValues, page });
+    }, [selectedMachineId, formData, slotValues, page]);
     const [status, setStatus] = useState<{ text: string; type: "error" | "success" | "warning" | "" }>({ text: "", type: "" });
     const navigate = useNavigate();
     const { hasPermission } = useAuth();
@@ -79,17 +80,18 @@ export const DynamicMachineForm: React.FC = () => {
         fetchMachines();
     }, []);
 
-
     /**
      * Handle Machine Selection with placeholder protection
      */
     const handleSelectMachine = (id: string) => {
-        if (id === "_") {
+        if (id === "_" || id === selectedMachineId) {
             return;
         }
+        // A different machine has different material slots, so start those over
+        setSlotValues([]);
+        setSchema({});
         setSelectedMachineId(id);
     };
-
 
     /**
      * Fetch Machine Schema on Machine Selection
@@ -107,48 +109,30 @@ export const DynamicMachineForm: React.FC = () => {
 
     }, [selectedMachineId]);
 
-
     /**
-     * Generate Resource Usage Form on Schema Load
+     * One entry per material slot, keeping anything already filled in for this machine
      */
     useEffect(() => {
         if (!schema.resource_slots) return;
-
-        const initialValues: ResourceSlotElement[] = schema.resource_slots.map((slot: ResourceSlotSchema) => ({
-            slot_id: slot.resource_slot_id,
-            name: "_",
-            brand: "_",
-            color: "_",
-            amount: 0,
-            own: false,
-            cost: 0,
-        }));
-
-        setSlotValues(initialValues);
-
-        const fieldId = uuidv4();
-        const resourceUsageProps = {
-            slots: schema.resource_slots,
-            initialValues,
-            setSlots: (updatedSlot: ResourceSlotElement) => {
-                setSlotValues((prevSlots) => {
-                    const newSlots = [...prevSlots];
-                    const slotIndex = newSlots.findIndex((slot) => slot.slot_id === updatedSlot.slot_id);
-                    newSlots[slotIndex] = updatedSlot;
-                    return newSlots;
-                });
-            }
-        };
-
-        const newResourceUsageForm = <ResourceUsageForm key={fieldId} {...resourceUsageProps} />;
-        setResourceUsageForm(newResourceUsageForm);
+        setSlotValues((prev) => schema.resource_slots.map((slot: ResourceSlotSchema) =>
+            prev.find((value) => value.slot_id === slot.resource_slot_id) ?? blankSlot(slot.resource_slot_id)
+        ));
     }, [schema]);
+
+    const updateSlot = useCallback((updatedSlot: ResourceSlotElement) => {
+        setSlotValues((prevSlots) => prevSlots.map((slot) => slot.slot_id === updatedSlot.slot_id ? updatedSlot : slot));
+    }, []);
 
     function updateStatus(message: string, type: string) {
         setStatus({ text: message, type: type as "error" | "success" | "warning" | ""});
         try { document.getElementById('status-text')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {console.log('Failed to display status text')}
     }
     function clearStatus() {updateStatus("", "");}
+
+    const toCount = (value: unknown) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+    };
 
     /**
      * Handle Form Submission
@@ -174,12 +158,13 @@ export const DynamicMachineForm: React.FC = () => {
             }
         });
 
-        const duration_seconds = Math.ceil((formData.hours * 3600) + (formData.minutes * 60));
+        const duration_seconds = Math.ceil((toCount(formData.hours) * 3600) + (toCount(formData.minutes) * 60));
         console.log("Resource Usages:", resource_usages);
         const usageData = {
-            as_org_id: formData.org ? formData.org : null,
+            as_org_id: null,
             duration_seconds: duration_seconds,
             resource_usages: resource_usages,
+            is_reprint: formData.reprint,
         };
 
         console.log("Usage Data:", usageData);
@@ -188,6 +173,7 @@ export const DynamicMachineForm: React.FC = () => {
             const response = await OmniAPI.use(selectedMachineId, usageData);
             console.log("Usage Response:", response);
             if (response == null) {
+                clearDraft();
                 updateStatus("Usage submitted successfully.", "success");
                 window.setTimeout(() => navigate('../../status'), 1000);
             } else {
@@ -206,6 +192,12 @@ export const DynamicMachineForm: React.FC = () => {
                 updateStatus("The selected machine does not exist.", "error");
             } else if (error.status == 403) {
                 updateStatus("You are not permitted to use this machine.", "error");
+            } else if (error.status == 422) {
+                const problems = Array.isArray(error?.response?.data?.detail)
+                    ? error.response.data.detail.map((d: any) => `${(d.loc ?? []).slice(1).join(' → ')}: ${d.msg}`).join('; ')
+                    : detail;
+                console.error("Usage form rejected:", error?.response?.data);
+                updateStatus(`Some of the form data was invalid${problems ? ` (${problems})` : ''}. Please check the form and try again.`, "error");
             } else {
                 updateStatus("An error occurred. Please try again.", "error");
             }
@@ -234,6 +226,8 @@ export const DynamicMachineForm: React.FC = () => {
         }
 
         //Check if resource is selected
+        let amountWarning = "";
+
         if (page == 3) {
             const invalidSlot = slotValues.find((slot) => validateResourceUsage(slot));
             if (invalidSlot) {
@@ -241,166 +235,150 @@ export const DynamicMachineForm: React.FC = () => {
                 return;
             }
 
-            var invalidAmount = false;
+            if (slotValues.some((slot) => Number(slot.amount) < 0)) {
+                updateStatus("Please enter a valid amount of material", "error");
+                return;
+            }
 
-            slotValues.forEach((slot) => {
-                if (slot.amount < 0) {
-                    updateStatus("Please enter a valid amount of material", "error");
-                    invalidAmount = true;
-                }
-                if (slot.amount > 1000 && !slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`, "warning");
-                } else if (slot.amount > 1000 && slot.own) {
-                    updateStatus(`WARNING: The amount of material you selected for ${slot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`, "warning");
-                }
-            });
-
-            if (invalidAmount) return;
+            const bigSlot = slotValues.find((slot) => Number(slot.amount) > 2000);
+            if (bigSlot) {
+                amountWarning = bigSlot.own
+                    ? `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please make sure you have enough material to complete the print - you will not able to use Forge resources to complete the print.`
+                    : `WARNING: The amount of material you selected for ${bigSlot.name} is greater than a single spool of filament. You will need to change the filament during the print. This is allowed, but please alert a volunteer or room manager after you start the print, so they are aware.`;
+            }
         }
 
         //Check if duration is valid
-        if (page == 4 && ((formData.hours == 0 && formData.minutes == 0) || formData.hours < 0 || formData.minutes < 0)) {
+        if (page == 4 && ((toCount(formData.hours) == 0 && toCount(formData.minutes) == 0) || toCount(formData.hours) < 0 || toCount(formData.minutes) < 0)) {
             updateStatus("Please enter a valid duration.", "error");
             return;
         }
 
-        clearStatus();
+        if (amountWarning) {
+            updateStatus(amountWarning, "warning");
+        } else {
+            clearStatus();
+        }
         setPage(page);
     };
 
+    const machineOptions = machines.filter((machine: Machine) => canSeeDisabled || !machine.disabled);
 
     return (
-        <div className="use-a-machine">
-            <form className="usage-form" onSubmit={handleSubmit}>
-                <FormIcon />
-                <h2>Machine Usage Form</h2>
-                {page == 1 &&
-                    <div className="machine-selection">
-                        <label>1. Machine Selection</label>
-                        <Select.Root
-                            value={selectedMachineId === "0" ? "" : selectedMachineId}
-                            onValueChange={handleSelectMachine}
-                        >
-                            <Select.Trigger className="machine-select-trigger" aria-label="Select a machine">
-                                <Select.Value placeholder="Please Select a Machine" />
-                                <Select.Icon aria-hidden>
-                                    <ChevronDownIcon />
-                                </Select.Icon>
-                            </Select.Trigger>
-                            <Select.Portal>
-                                <Select.Content className="machine-select-content" position="popper" sideOffset={4}>
-                                    <Select.Viewport>
-                                        {machines.filter((machine: Machine) => canSeeDisabled || !machine.disabled).map((machine: Machine) => (
-                                            <Select.Item
-                                                className="machine-select-item"
-                                                key={machine.id}
-                                                value={machine.id}
-                                                disabled={machine.maintenance_mode || machine.disabled}
-                                            >
-                                                <Select.ItemText>
-                                                    {machine.name}
-                                                    {machine.maintenance_mode ? ' (Under Maintenance)' : machine.disabled ? ' (Disabled)' : ''}
-                                                </Select.ItemText>
-                                            </Select.Item>
-                                        ))}
-                                    </Select.Viewport>
-                                </Select.Content>
-                            </Select.Portal>
-                        </Select.Root>
-                    </div>
-                }
+        <div className="usage-page">
+            <form className="usage-card" onSubmit={handleSubmit} noValidate>
+                <h1 className="admin-form__title">Machine Usage Form</h1>
+                <img className="admin-form__divider" src={dividerLine} alt="" aria-hidden="true" />
 
+                <div className="admin-form__body usage-card__body">
+                    {page === 1 && (
+                        <AdminField label="Choose a Machine" htmlFor="machine-select">
+                            <select
+                                id="machine-select"
+                                value={selectedMachineId === "0" ? "" : selectedMachineId}
+                                onChange={(e) => handleSelectMachine(e.target.value)}
+                            >
+                                <option value="" disabled>{machines.length ? "Select a machine" : "Loading…"}</option>
+                                {machineOptions.map((machine: Machine) => (
+                                    <option
+                                        key={machine.id}
+                                        value={machine.id}
+                                        disabled={!!machine.maintenance_mode || !!machine.disabled}
+                                    >
+                                        {machine.name}
+                                        {machine.maintenance_mode ? ' (Under Maintenance)' : machine.disabled ? ' (Disabled)' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </AdminField>
+                    )}
 
-                {page == 2 && resourceUsageForm}
+                    {/* Kept mounted so the material choices survive going Back and Next */}
+                    {page === 2 && (
+                        <div className="usage-card__materials">
+                            {schema.resource_slots
+                                ? <ResourceUsageForm slots={schema.resource_slots} values={slotValues} setSlots={updateSlot} />
+                                : <p className="admin-form__text">Loading materials…</p>}
+                        </div>
+                    )}
 
+                    {page === 3 && (
+                        <div className="usage-card__duration">
+                            <label htmlFor="hours">Usage Duration</label>
+                            <div className="usage-card__time">
+                                <input
+                                    id="hours"
+                                    type="number"
+                                    inputMode="numeric"
+                                    step="1"
+                                    min="0"
+                                    aria-label="Hours"
+                                    value={Number.isNaN(formData.hours) ? '' : formData.hours}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, hours: e.target.valueAsNumber }))}
+                                />
+                                <span>hr</span>
+                                <input
+                                    id="minutes"
+                                    type="number"
+                                    inputMode="numeric"
+                                    step="1"
+                                    min="0"
+                                    aria-label="Minutes"
+                                    value={Number.isNaN(formData.minutes) ? '' : formData.minutes}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, minutes: e.target.valueAsNumber }))}
+                                />
+                                <span>min</span>
+                            </div>
+                        </div>
+                    )}
 
-                {page == 3 &&
-                    <div className="usage-duration">
-                        <label>3. Usage Duration</label>
-                        <input
-                            id="hours"
-                            type="number"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            step="1"
-                            min="0"
-                            placeholder="Hours"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'hours': e.target.valueAsNumber }))}
-                            value={formData.hours}
-                        />
-                        <label htmlFor="hours">hr</label>
-                        <input
-                            id="minutes"
-                            type="number"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            step="1"
-                            min="0"
-                            placeholder="Minutes"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'minutes': e.target.valueAsNumber }))}
-                            value={formData.minutes}
-                        />
-                        <label htmlFor="minutes">min</label>
-                    </div>
-                }
-
-                {page == 4 &&
-                    <div className="usage-policies">
-                        <input
-                            id='checkbox-usage-policy'
-                            className='styled-checkbox'
-                            type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'policy': e.target.value }))}
-                        />
-                        <label
-                            htmlFor='checkbox-usage-policy'
-                            className='checkbox-label'
-                        >
-                            <span style={{ color: 'red' }}>*</span>
-                            Do you agree to the Machine Usage Policy? 
-                        </label>
-                        <input
-                            id='checkbox-org-usage'
-                            className='styled-checkbox'
-                            type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'org': e.target.value }))}
-                        />
-                        <label
-                            htmlFor='checkbox-org-usage'
-                            className='checkbox-label'
-                        >
-                            Is this machine usage for an organization?
-                        </label>
-
-                        <input
-                            id='checkbox-reprint'
-                            className='styled-checkbox'
-                            type="checkbox"
-                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint': e.target.value }))}
-                        />
-                        <label
-                            htmlFor='checkbox-reprint'
-                            className='checkbox-label'
-                        >
-                            Is this a reprint?
-                        </label>
-                    </div>
-                }
-
-                <div id="status-text" className={`status-text ${status.type === "success" ? "success" : status.type === "error" ? "error" : ""}`}>{status.text}</div>
-                <div className="pagination-buttons">
-                    <button type="button" onClick={() => {clearStatus(); setPage(page - 1)}} disabled={page === 1}>Back</button>
-                    {page !== 4 && <button type="button" onClick={() => handlePageChange(page + 1)} disabled={page === 4}>Next</button>}
-                    {page == 4 && <button type="submit">Submit</button>}
+                    {page === 4 && (
+                        <>
+                            <AdminCheck
+                                id="policy"
+                                label={<>Do you agree to the Machine Usage Policy?<span className="usage-card__required" aria-hidden="true">*</span></>}
+                                checked={formData.policy}
+                                onChange={(checked) => setFormData((prev) => ({ ...prev, policy: checked }))}
+                            />
+                            <AdminCheck
+                                id="reprint"
+                                label="Is this a reprint?"
+                                checked={formData.reprint}
+                                onChange={(checked) => setFormData((prev) => ({ ...prev, reprint: checked }))}
+                            />
+                        </>
+                    )}
                 </div>
 
+                <p id="status-text" className={`usage-card__status usage-card__status--${status.type || "none"}`} role="status">
+                    {status.text}
+                </p>
+
+                <div className="usage-card__nav">
+                    <button
+                        type="button"
+                        className="admin-form__submit"
+                        onClick={() => { clearStatus(); setPage(page - 1); }}
+                        disabled={page === 1}
+                    >
+                        Back
+                    </button>
+                    {page !== LAST_PAGE ? (
+                        <button key="next" type="button" className="admin-form__submit" onClick={() => handlePageChange(page + 1)}>
+                            Next
+                        </button>
+                    ) : (
+                        <button key="submit" type="submit" className="admin-form__submit">Submit</button>
+                    )}
+                </div>
             </form>
-        </div >
+        </div>
     );
 };
 
 
-/** This interface will serve as the master version of the schema - not the editable state version */
+interface MachineSchemaResponse { [key: string]: any; }
+
 interface ResourceSlotSchema {
     resource_slot_id: string;
     display_name: string;
@@ -409,11 +387,6 @@ interface ResourceSlotSchema {
     allow_empty: boolean;
 }
 
-
-/** This is an interface to use as a template to populate the ResourceSlotElement into a state
- *  An instance should be created for each resource slot in the 
- *  machine schema, and then populated with the setSlots function
- */
 interface ResourceSlotElement {
     slot_id: string;
     resource_id?: string;
@@ -425,265 +398,95 @@ interface ResourceSlotElement {
     cost: number;
 }
 
-/** Passing along a state object wouldn't have worked, so when slotValues updated, initialValues will need to be updated concurrently */
 interface ResourceUsageFormProps {
     slots: ResourceSlotSchema[];
-    initialValues: ResourceSlotElement[];
+    values: ResourceSlotElement[];
     setSlots: (updatedSlot: ResourceSlotElement) => void;
 }
 
-/* This is a CustomField for the CustomForm Component to use */
-const ResourceUsageForm: React.FC<ResourceUsageFormProps> = ({ slots, initialValues, setSlots }) => {
-
-    const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>(initialValues);
-
-    const handleSlotChange = (slotValue: ResourceSlotElement) => {
-        const newSlotValues = [...slotValues];
-        const slotIndex = newSlotValues.findIndex((slot) => slot.slot_id === slotValue.slot_id);
-        newSlotValues[slotIndex] = slotValue;
-        setSlotValues(newSlotValues);
-    }
-
-    const showBrand = false; //slots.find((slot) => slot.valid_resources.find((resource) => resource.brand)) ? true : false;
-    const showColor = false; //slots.find((slot) => slot.valid_resources.find((resource) => resource.color) ? true : false);
-
-    return (
-        <Suspense fallback={<div>Loading...</div>}>
-            <div className="resource-usage-form">
-                <label>2. Resource Selection</label>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Slot Name</th>
-                            <th>Material</th>
-                            {showBrand && <th>Brand</th>}
-                            {showColor && <th>Color</th>}
-                            <th className="amount">Amount</th>
-                            <th className="own-material">Personal Material</th>
-                            <th>Cost</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {slots.map((slot, index) => (
-                            <ResourceSlot
-                                key={slot.resource_slot_id + index}
-                                slot={slot}
-                                slotValue={initialValues[index]}
-                                setSlotValue={setSlots}
-                                showBrand={showBrand}
-                                showColor={showColor}
-                            />
-                        ))}
-                    </tbody>
-
-                </table>
-            </div >
-        </Suspense>
-    );
-};
+const ResourceUsageForm: React.FC<ResourceUsageFormProps> = ({ slots, values, setSlots }) => (
+    <>
+        {slots.map((slot, index) => (
+            <ResourceSlot
+                key={slot.resource_slot_id + index}
+                slot={slot}
+                value={values.find((v) => v.slot_id === slot.resource_slot_id) ?? blankSlot(slot.resource_slot_id)}
+                setSlotValue={setSlots}
+                showHeading={slots.length > 1}
+            />
+        ))}
+        {slots.length === 0 && <p className="admin-form__text">This machine doesn't use any material.</p>}
+    </>
+);
 
 interface ResourceSlotProps {
     slot: ResourceSlotSchema;
-    slotValue: ResourceSlotElement;
+    value: ResourceSlotElement;
     setSlotValue: (slotValue: ResourceSlotElement) => void;
-    showBrand?: boolean;
-    showColor?: boolean;
+    showHeading?: boolean;
 }
 
-
-const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, slotValue, setSlotValue, showBrand, showColor }) => {
-    const [selectedDetails, setSelectedDetails] = useState<ResourceSlotElement>({
-        slot_id: slot.resource_slot_id,
-        name: "_",
-        brand: "_",
-        color: "_",
-        amount: 0,
-        own: false,
-        cost: 0,
-    });
-
-    const [cost, setCost] = useState(0);
-
+// Everything lives in the parent form, so nothing is lost when this page is hidden and shown again
+const ResourceSlot: React.FC<ResourceSlotProps> = ({ slot, value, setSlotValue, showHeading }) => {
     const validResources = slot.valid_resources;
 
-    // Get unique materials (always available)
-    const materialOptions = useMemo(() => [...new Set(validResources.map(resource => resource.name))], [validResources]);
+    const materialOptions = useMemo(() => [...new Set(validResources.map(r => r.name))], [validResources]);
 
-    // Get brands based on selected material
-    const brandOptions = useMemo(() => [...new Set(validResources
-        .filter(resource => resource.name === selectedDetails.name || selectedDetails.name === "_")
-        .map(resource => resource.brand))],
-        [validResources, selectedDetails.name]);
-
-    // Get colors based on selected material and brand
-    const colorOptions = useMemo(() => [...new Set(validResources
-        .filter(resource => resource.name === selectedDetails.name && resource.brand === selectedDetails.brand || selectedDetails.name === "_")
-        .map(resource => resource.color))],
-        [validResources, selectedDetails.name, selectedDetails.brand]);
-
-    // Find the best matching resource
-    const matchingResource = (name: string, brand: string, color: string) => {
-        return validResources.find(resource =>
-            resource.name === name &&
-            (brand === "_" || resource.brand === brand) &&
-            (color === "_" || resource.color === color)
-        ) ?? null;
-    };
-
-    const updateSelectedDetails = (name: string, newValue: string | boolean) => {
-        setSelectedDetails(prev => {
-            let updatedDetails = { ...prev, [name]: newValue };
-
-            // Get valid brands for the selected material
-            const validBrands = validResources
-                .filter(resource => resource.name === updatedDetails.name)
-                .map(resource => resource.brand);
-
-            // Get valid colors for the selected material & brand
-            const validColors = validResources
-                .filter(resource => resource.name === updatedDetails.name && resource.brand === updatedDetails.brand)
-                .map(resource => resource.color);
-
-            // If material changes, check if brand is still valid
-            if (name === "name" && !validBrands.includes(updatedDetails.brand)) {
-                updatedDetails.brand = "_"; // Reset brand if it's not a valid option anymore
-            }
-
-            // If brand changes, check if color is still valid
-            if ((name === "name" || name === "brand") && !validColors.includes(updatedDetails.color)) {
-                updatedDetails.color = "_"; // Reset color if it's not a valid option anymore
-            }
-
-            // Find best resource with the selected options
-            const resource = matchingResource(updatedDetails.name, updatedDetails.brand || "_", updatedDetails.color || "_");
-            const unitCost = parseFloat(resource?.cost ?? "0");
-            updatedDetails.cost = updatedDetails.own ? 0 : (updatedDetails.amount * unitCost);
-
-            return updatedDetails;
-        });
-    };
+    const matchingResource = (name: string, brand: string, color: string) =>
+        validResources.find(r => r.name === name && (brand === "_" || r.brand === brand) && (color === "_" || r.color === color)) ?? null;
 
     const handleChange = (event: ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
-        const { name, value, type } = event.target;
-        const newValue = type === "checkbox" ? (event.target as HTMLInputElement).checked : value;
-        updateSelectedDetails(name, newValue);
+        const { name, value: raw, type } = event.target;
+        const newValue = type === "checkbox" ? (event.target as HTMLInputElement).checked : raw;
+
+        const updated: ResourceSlotElement = { ...value, [name]: newValue };
+        const validBrands = validResources.filter(r => r.name === updated.name).map(r => r.brand);
+        const validColors = validResources.filter(r => r.name === updated.name && r.brand === updated.brand).map(r => r.color);
+        if (name === "name" && !validBrands.includes(updated.brand)) updated.brand = "_";
+        if ((name === "name" || name === "brand") && !validColors.includes(updated.color)) updated.color = "_";
+        const resource = matchingResource(updated.name, updated.brand || "_", updated.color || "_");
+        const unitCost = parseFloat(String(resource?.cost ?? "0"));
+        const amount = Number(updated.amount);
+        updated.resource_id = resource?.id;
+        updated.cost = updated.own || Number.isNaN(amount) ? 0 : amount * unitCost;
+        setSlotValue(updated);
     };
 
-    useEffect(() => {
-        const matchedResource = validResources.find(resource =>
-            resource.name === selectedDetails.name &&
-            (resource.brand === selectedDetails.brand || selectedDetails.brand === "_") &&
-            (resource.color === selectedDetails.color || selectedDetails.color === "_")
-        );
-
-        setSlotValue({
-            slot_id: selectedDetails.slot_id,
-            resource_id: matchedResource?.id,
-            name: selectedDetails.name,
-            brand: selectedDetails.brand,
-            color: selectedDetails.color,
-            amount: Number.isNaN(selectedDetails.amount) ? 0 : selectedDetails.amount,
-            own: selectedDetails.own,
-            cost: cost,
-        });
-    }, [selectedDetails, setSlotValue]);
-
-    useEffect(() => {
-        setCost(selectedDetails.cost);
-    }, [selectedDetails.cost]);
+    const cost = value.cost ?? 0;
+    const selectedDetails = value;
+    const selected = matchingResource(selectedDetails.name, selectedDetails.brand || "_", selectedDetails.color || "_");
+    const idBase = `slot-${slot.resource_slot_id}`;
 
     return (
-        <tr>
-            <td data-label="Slot Name">{slot.display_name}</td>
-            {/* Material Dropdown (Always available) */}
-            <td data-label="Material">
-                <Select.Root
-                    value={selectedDetails.name}
-                    onValueChange={(value) => updateSelectedDetails("name", value)}
-                    required={!slot.allow_empty}
-                >
-                    <Select.Trigger className="resource-select-trigger" aria-label="Select material">
-                        <Select.Value />
-                        <Select.Icon aria-hidden>
-                            <ChevronDownIcon />
-                        </Select.Icon>
-                    </Select.Trigger>
-                    <Select.Portal>
-                        <Select.Content className="resource-select-content" position="popper" sideOffset={4}>
-                            <Select.Viewport>
-                                <Select.Item className="resource-select-item" value="_">
-                                    <Select.ItemText>--Material--</Select.ItemText>
-                                </Select.Item>
-                                {materialOptions.map(name => (
-                                    <Select.Item className="resource-select-item" key={name} value={name}>
-                                        <Select.ItemText>{name}</Select.ItemText>
-                                    </Select.Item>
-                                ))}
-                            </Select.Viewport>
-                        </Select.Content>
-                    </Select.Portal>
-                </Select.Root>
-            </td>
-
-            {/* Brand Dropdown (Only available if material is selected) */}
-            {showBrand && (
-                <td data-label="Brand">
-                    <select
-                        name="brand"
-                        value={selectedDetails.brand}
-                        onChange={handleChange}
-                        disabled={selectedDetails.name === "_"}
-                    >
-                        <option value="_">--Brand--</option>
-                        {brandOptions.map(brand => (
-                            <option key={brand} value={brand}>{brand}</option>
-                        ))}
-                    </select>
-                </td>
-            )}
-
-            {/* Color Dropdown (Only available if brand is selected) */}
-            {showColor && (
-                <td data-label="Color">
-                    <select
-                        name="color"
-                        value={selectedDetails.color}
-                        onChange={handleChange}
-                        disabled={selectedDetails.name === "_" || selectedDetails.brand === "_"}
-                    >
-                        <option value="_">--Color--</option>
-                        {colorOptions.map(color => (
-                            <option key={color} value={color}>{color}</option>
-                        ))}
-                    </select>
-                </td>
-            )}
-
-            {/* Amount Input */}
-            <td data-label="Amount">
+        <section className="usage-card__slot" aria-label={slot.display_name}>
+            {showHeading && <AdminFormHeading>{slot.display_name}</AdminFormHeading>}
+            <AdminField label="Material Quantity" htmlFor={`${idBase}-amount`}>
                 <input
+                    id={`${idBase}-amount`}
                     type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
                     name="amount"
                     value={selectedDetails.amount}
                     onChange={handleChange}
-                    required={!slot.allow_empty}
+                    placeholder={selected?.units ? `Amount in ${selected.units}` : undefined}
                 />
-            </td>
-
-            {/* Own Checkbox */}
-            <td data-label="Personal Material">
-                <input
-                    type="checkbox"
-                    name="own"
-                    checked={selectedDetails.own}
-                    onChange={handleChange}
-                />
-            </td>
-
-            {/* Cost Display */}
-            <td data-label="Cost">
-                {"$" + cost.toFixed(2)}
-            </td>
-        </tr>
+            </AdminField>
+            <AdminField label="Material" htmlFor={`${idBase}-material`}>
+                <select id={`${idBase}-material`} name="name" value={selectedDetails.name} onChange={handleChange}>
+                    <option value="_">Select a material</option>
+                    {materialOptions.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+            </AdminField>
+            <img className="admin-form__divider usage-card__slot-divider" src={dividerLine} alt="" aria-hidden="true" />
+            <AdminField label="Estimated Cost" htmlFor={`${idBase}-cost`}>
+                <output id={`${idBase}-cost`} className="usage-card__cost">{"$" + cost.toFixed(2)}</output>
+            </AdminField>
+            <div className="admin-form__check">
+                <input id={`${idBase}-own`} type="checkbox" name="own" checked={!!selectedDetails.own} onChange={handleChange} />
+                <label htmlFor={`${idBase}-own`}>Are you using your own material?</label>
+            </div>
+        </section>
     );
 };

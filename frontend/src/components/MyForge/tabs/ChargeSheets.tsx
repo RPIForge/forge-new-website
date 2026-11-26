@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { Cross2Icon } from '@radix-ui/react-icons';
+import { AdminField, AdminFormDialog, errorMessage } from '../../Admin/AdminForm';
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { UserPermission } from 'src/enums';
-import Table, { ITEMS_PER_PAGE, TableHead } from '../components/Table';
+import Table, { ITEMS_PER_PAGE, TableHead, ColumnDef, formatCell, usePagedList } from '../components/Table';
 import useAuth from '../../Auth/useAuth';
 
 import { UserCharge, Semester } from 'src/interfaces';
@@ -23,37 +22,33 @@ const ChargeSheets: React.FC = () => {
     const canGetCharges = hasPermission(UserPermission.CAN_GET_CHARGES);
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
 
-    const [data, setData] = useState<UserCharge[]>([]);
-    const [currentPage, setCurrentPage] = useState(1);
-    const columns: (keyof UserCharge)[] = ['RIN', 'first_name', 'last_name', 'semester_balance', 'is_graduating'];
+    const { data, currentPage, hasNext, loading, error, fetchPage } = usePagedList<UserCharge>('users', {
+        enabled: canSeeTables && canGetCharges,
+    });
+    const columnDefs: ColumnDef<UserCharge>[] = [
+        { key: 'name', label: 'Name', render: (u) => `${u.first_name} ${u.last_name}` },
+        { key: 'rin', label: 'RIN', render: (u) => u.RIN },
+        { key: 'balance', label: 'Usage Charges', render: (u) => `$${Number(u.semester_balance ?? 0).toFixed(2)}` },
+        { key: 'graduating', label: 'Graduating', render: (u) => formatCell(Boolean(u.is_graduating)) },
+    ];
 
     const [semesterId, setSemesterId] = useState<string | null>(null);
     const [semesters, setSemesters] = useState<Semester[]>([]);
 
     const [dialogOpen, setDialogOpen] = useState(false);
     const [membershipCharge, setMembershipCharge] = useState<number | ''>('');
+    const [busy, setBusy] = useState(false);
+    const [formError, setFormError] = useState('');
 
     useEffect(() => {
         Promise.all([
-            OmniAPI.getAll('semesters', { limit: 1000 }),
+            OmniAPI.getEvery('semesters'),
             OmniAPI.get('semesters', 'current'),
         ]).then(([all, current]) => {
             setSemesters(Array.isArray(all) ? all : []);
-            setSemesterId(current.id);
-        });
+            setSemesterId(current?.id ?? null);
+        }).catch(() => setSemesters([]));
     }, []);
-
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll('users', { limit: ITEMS_PER_PAGE, offset }).then((res) => {
-            setData(Array.isArray(res) ? res : []);
-            setCurrentPage(page);
-        });
-    };
-
-    useEffect(() => {
-        fetchPage(1);
-    }, [semesterId]);
 
     const handleSemesterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setSemesterId(e.target.value);
@@ -119,9 +114,11 @@ const ChargeSheets: React.FC = () => {
 
     const handleCreateChargeSheet = async () => {
         if (!semesterId || membershipCharge === '' || isNaN(Number(membershipCharge))) {
-            alert('Please select a semester and enter a valid membership charge.');
+            setFormError('Please select a semester and enter a valid membership charge.');
             return;
         }
+        setBusy(true);
+        setFormError('');
         try {
             const chargesResponse = await OmniAPI.exec('get_charges', { semester_id: semesterId });
             const charges: UserCharge[] = Array.isArray(chargesResponse) ? chargesResponse : [];
@@ -137,7 +134,9 @@ const ChargeSheets: React.FC = () => {
             if (nongraduatingRows.length > 0) downloadCSV(nongraduatingRows, semesterName, 'nongraduating');
             setDialogOpen(false);
         } catch (err) {
-            alert('Failed to create charge sheet.');
+            setFormError(errorMessage(err, 'Failed to create charge sheet.'));
+        } finally {
+            setBusy(false);
         }
     };
 
@@ -146,52 +145,53 @@ const ChargeSheets: React.FC = () => {
         <div className='tab-column-cover align-center'>
             <TableHead heading="Charge Sheets" />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, width: '100%',  padding: 30}}>
-                <Dialog.Root open={dialogOpen} onOpenChange={setDialogOpen}>
-                    <Dialog.Trigger asChild>
-                        <button type="button" className="Button OfficerBtn">
+                <AdminFormDialog
+                    open={dialogOpen}
+                    onOpenChange={(open) => { setFormError(''); setDialogOpen(open); }}
+                    title="Create Charge Sheet"
+                    submitLabel="Download"
+                    onSubmit={handleCreateChargeSheet}
+                    busy={busy}
+                    error={formError}
+                    trigger={
+                        <button type="button" className="Button OfficerBtn" onClick={() => setDialogOpen(true)}>
                             Create Charge Sheet
                         </button>
-                    </Dialog.Trigger>
-                    <Dialog.Portal>
-                        <div className='AEdiv'>
-                            <Dialog.Overlay className="DialogOverlay" />
-                            <Dialog.Content className="DialogContent" aria-describedby={undefined} style={{ minWidth: 320 }}>
-                                <Dialog.Close asChild>
-                                    <button className="IconButton" aria-label="Close">
-                                        <Cross2Icon />
-                                    </button>
-                                </Dialog.Close>
-                                <Dialog.Title className="DialogTitle">Create Semester Charge Sheet</Dialog.Title>
-                                <fieldset className="Fieldset">
-                                    <label className="Label" htmlFor="semester-select">Semester:</label>
-                                    <select  id="semester-select" value={semesterId ?? ''} onChange={handleSemesterChange} disabled={semesters.length === 0} style={{ width: '100%' }} >
-                                        {semesters.map((sem) => (
-                                            <option key={sem.id} value={sem.id}>
-                                                {getSemesterName(sem).replace('_', ' ')}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </fieldset>
-                                <fieldset className="Fieldset">
-                                    <label className="Label" htmlFor="membership-charge-input">Semester membership charge:</label>
-                                    <input className="Input" id="membership-charge-input" type="number"  min="0" value={membershipCharge} onChange={e => setMembershipCharge(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%' }}/>
-                                </fieldset>
-                                <div className="dialog-actions" style={{ marginTop: 16 }}>
-                                    <button className="Button SaveBtn" style={{ minWidth: 80 }} onClick={handleCreateChargeSheet}>
-                                        Download
-                                    </button>
-                                </div>
-                            </Dialog.Content>
-                        </div>
-                    </Dialog.Portal>
-                </Dialog.Root>
+                    }
+                >
+                    <AdminField label="Select a Semester" htmlFor="semester-select">
+                        <select id="semester-select" value={semesterId ?? ''} onChange={handleSemesterChange} disabled={semesters.length === 0} required>
+                            <option value="" disabled>Select a semester</option>
+                            {semesters.map((sem) => (
+                                <option key={sem.id} value={sem.id}>
+                                    {getSemesterName(sem).replace('_', ' ')}
+                                </option>
+                            ))}
+                        </select>
+                    </AdminField>
+                    <AdminField label="Membership Charge" htmlFor="membership-charge-input">
+                        <input
+                            id="membership-charge-input"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="any"
+                            value={membershipCharge}
+                            onChange={e => setMembershipCharge(e.target.value === '' ? '' : Number(e.target.value))}
+                            required
+                        />
+                    </AdminField>
+                </AdminFormDialog>
             </div>
 
             <div style={{ color: 'red',  paddingLeft: 32, paddingRight: 32}}>
                 Warning: The data below is a visual of the current semester. Export the csv for the charge sheet.
             </div>
             <Table<UserCharge>
-                columns={columns}
+                columnDefs={columnDefs}
+                loading={loading}
+                error={error}
+                hasNext={hasNext}
                 data={data}
                 currentPage={currentPage}
                 onPageChange={fetchPage}

@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
 import "./Footer.scss";
 import footerContacts from "./footerContacts.json";
 
@@ -6,6 +7,23 @@ import footerContacts from "./footerContacts.json";
 const toTelHref = (phone: string) => `tel:+1${phone.replace(/\D/g, "")}`;
 
 export default function Footer() {
+  const { pathname } = useLocation();
+
+  if (pathname.startsWith("/myforge") || pathname.startsWith("/admin")) {
+    return (
+      <footer className="footer footer--compact">
+        <div className="footer-compact">
+          <div>
+            <p className="footer-compact-title">THE FORGE | The MILL</p>
+            <p className="footer-compact-line">Rensselaer Polytechnic Institute · School of Engineering</p>
+            <p className="footer-compact-line">110 8th St, Troy, NY 12180</p>
+          </div>
+          <a className="footer-compact-site" href="https://rpiforge.dev">rpiforge.dev</a>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="footer">
       <div className="footer-inner">

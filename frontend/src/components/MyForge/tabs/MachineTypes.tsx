@@ -1,13 +1,12 @@
 import React, { ReactNode, useState } from 'react';
-import Table, { DeleteItem, ITEMS_PER_PAGE } from '../components/Table';
+import Table, { DeleteItem, ITEMS_PER_PAGE, ColumnDef, formatCell, usePagedList } from '../components/Table';
 import { TableHead } from '../components/Table';
 
 import '../styles/TabStyles.scss';
 import { emptyMachine, MachineType, ResourceSlot } from 'src/interfaces';
 
-import { Cross2Icon, PlusIcon } from "@radix-ui/react-icons";
-import * as Dialog from '@radix-ui/react-dialog';
-import ResourceSlots from './ResourceSlots';
+import { PlusIcon } from "@radix-ui/react-icons";
+import { AdminCheck, AdminCheckList, AdminField, AdminFormDialog, AdminFormHeading, errorMessage } from '../../Admin/AdminForm';
 import { OmniAPI } from 'src/apis/OmniAPI';
 import { UserPermission } from 'src/enums';
 import useAuth from '../../Auth/useAuth';
@@ -21,142 +20,104 @@ interface aemenuprops {
 }
 
 const aemenu = (props: aemenuprops): [ReactNode, (state: boolean, mach: MachineType | null) => void] => {
-    let { isDialogOpen, setIsDialogOpen, machineType, setMachineType, refresh} = props;
+    const { isDialogOpen, setIsDialogOpen, machineType, setMachineType, refresh } = props;
 
     const { hasPermission } = useAuth();
     const canCreate = hasPermission(UserPermission.CAN_CREATE_MACHINE_TYPES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_MACHINE_TYPES);
     const canSeeTables = hasPermission(UserPermission.CAN_SEE_TABLES);
-        
+
     const [name, setName] = useState("");
-    const [resourceSlots, setResourceSlots] = useState<ResourceSlot[]>([]);
-
-    React.useEffect(() => {
-        OmniAPI.getAll("resourceslots").then(rs =>{
-            setResourceSlots(rs);
-        });
-    }, []);
-
+    const [cost, setCost] = useState<number | "">(0);
+    const [resourceSlots, setResourceSlots] = useState<ResourceSlot[] | null>(null);
     const [resourceSlotIDS, setResourceSlotIDS] = useState<string[]>([]);
-    const [cost, setCost] = useState<number>(0.0);
-    const handleCheckboxChange = (value: string) => {
-        setResourceSlotIDS(prev =>
-            prev.includes(value)
-            ? prev.filter(item => item !== value) // remove
-            : [...prev, value] // add
-        );
-    };
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
 
-    const handleOpenChange = (open: boolean) => {
-        if (!open) setOpenExtra(false, null);
+    // Only load the resource slot list once the form is actually opened
+    React.useEffect(() => {
+        if (!isDialogOpen || resourceSlots !== null) return;
+        OmniAPI.getEvery("resourceslots").then(setResourceSlots).catch(() => setResourceSlots([]));
+    }, [isDialogOpen]);
+
+    const toggleSlot = (id: string) => {
+        setResourceSlotIDS(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
     };
 
     const setOpenExtra = (state: boolean, mach: MachineType | null) => {
+        setError("");
         setMachineType(mach);
-        if (mach != null) {
-            setName(mach.name);
-            setResourceSlotIDS(mach.resource_slot_ids);
-            setCost(mach.cost_per_hour);
-        } else {
-            setName("");
-            setResourceSlotIDS([]);
-            setCost(0);
-        }
+        setName(mach?.name ?? "");
+        setResourceSlotIDS(mach?.resource_slot_ids ?? []);
+        setCost(mach?.cost_per_hour != null ? Number(mach.cost_per_hour) : 0);
         if (isDialogOpen != state) setIsDialogOpen(state);
     };
 
-    function create() {
-        if (!canCreate) {
-            alert("You do not have the permissions to create machine types");
+    const save = async () => {
+        if (machineType == null ? !canCreate : !canEdit) {
+            setError("You do not have the permissions to do this.");
             return;
         }
-        if (!name || cost == null) {
-            alert("All fields must be populated!");
+        if (!name.trim() || cost === "") {
+            setError("Name and hourly cost must be filled in.");
             return;
         }
-
-        OmniAPI.create("machinetypes", {
-            name,
-            resource_slot_ids: resourceSlots
-                .filter(r => resourceSlotIDS.includes(r.id))
-                .map(r => r.id),
-            cost_per_hour: cost.toString(),
-        }).then(() => {
+        setBusy(true);
+        setError("");
+        try {
+            const body = { name: name.trim(), resource_slot_ids: resourceSlotIDS, cost_per_hour: String(cost) };
+            if (machineType) await OmniAPI.edit("machinetypes", machineType.id, body);
+            else await OmniAPI.create("machinetypes", body);
             refresh();
             setOpenExtra(false, null);
-        });
-    }
-
-    function edit() {
-        if (!machineType) return;
-        if (!canEdit) {
-            alert("You do not have the permissions to edit machine types");
-            return;
+        } catch (err) {
+            setError(errorMessage(err, "Could not save the machine type."));
+        } finally {
+            setBusy(false);
         }
-        if (!name || cost == null) {
-            alert("All fields must be populated!");
-            return;
-        }
+    };
 
-        OmniAPI.edit("machinetypes", machineType.id, {
-            name,
-            resource_slot_ids: resourceSlots
-                .filter(r => resourceSlotIDS.includes(r.id))
-                .map(r => r.id),
-            cost_per_hour: cost.toString(),
-        }).then(() => {
-            refresh();
-            setOpenExtra(false, null);
-        });
-    }
-
-    if (!canSeeTables || (!canCreate && !canEdit)) return [<></>, () => {}]; 
+    if (!canSeeTables || (!canCreate && !canEdit)) return [<></>, () => {}];
     return [(
-        <Dialog.Root open={isDialogOpen} onOpenChange={handleOpenChange}>
-            {canCreate && (
-                <button className="addbtn" onClick={() => { setOpenExtra(true, null); }}><PlusIcon /></button>
+        <AdminFormDialog
+            open={isDialogOpen}
+            onOpenChange={(open) => { if (!open) setOpenExtra(false, null); }}
+            title={machineType == null ? "Adding a Machine Type" : "Editing a Machine Type"}
+            onSubmit={save}
+            busy={busy}
+            error={error}
+            trigger={canCreate && (
+                <button className="addbtn" aria-label="Add a machine type" onClick={() => setOpenExtra(true, null)}><PlusIcon /></button>
             )}
-            {(canCreate || canEdit) && (
-                <Dialog.Portal>
-                    <div className='AEdiv'>
-                        <Dialog.Overlay className="DialogOverlay" />
-                        <Dialog.Content className="DialogContent">
-                            <Dialog.Close asChild>
-                                <button className="IconButton" aria-label="Close">
-                                    <Cross2Icon />
-                                </button>
-                            </Dialog.Close>
-                            <Dialog.Title className="DialogTitle">{machineType == null ? "Adding" : "Editing"}  Machine Type</Dialog.Title>
-                            <fieldset className="Fieldset">
-                                <label className="Label" htmlFor="name">Name</label>
-                                <input className="Input" id="name" value={name} onChange={e => setName(e.target.value)} maxLength={100} />
-
-                                <label className="Label" htmlFor="resourceSlots">Resource Slots</label>
-                                {resourceSlots.map(resourceSlot => (
-                                    <div className="checkbox-labels" key={resourceSlot.id}>
-                                        <input
-                                            className='styled-checkbox'
-                                            type="checkbox"
-                                            checked={resourceSlotIDS.includes(resourceSlot.id)}
-                                            onChange={() => handleCheckboxChange(resourceSlot.id)}
-                                        />
-                                        <label htmlFor='checkbox-layer-shift' className='checkbox-label'>
-                                            {resourceSlot.display_name}
-                                        </label>
-                                    </div>
-                                ))}
-
-                                <label className="Label" htmlFor="cost">Cost</label>
-                                <input className="Input" placeholder={cost + ""} id="cost" type="number" value={cost} min={0} pattern="[0-9]*" onChange={e => setCost(Math.max(0, e.target.valueAsNumber))} />
-                            </fieldset>
-                            <Dialog.Close asChild>
-                                <button className="Button SaveBtn" onClick={machineType == null ? create : edit}>Save</button>
-                            </Dialog.Close>
-                        </Dialog.Content>
-                    </div>
-                </Dialog.Portal>
-            )}
-        </Dialog.Root>
+        >
+            <AdminField label="Machine Type Name" htmlFor="type-name">
+                <input id="type-name" value={name} onChange={e => setName(e.target.value)} maxLength={100} required />
+            </AdminField>
+            <AdminField label="Hourly Usage Cost" htmlFor="type-cost">
+                <input
+                    id="type-cost"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={cost}
+                    onChange={e => setCost(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                    required
+                />
+            </AdminField>
+            <AdminFormHeading>Resources</AdminFormHeading>
+            <AdminCheckList empty={resourceSlots === null ? "Loading…" : "No resource slots yet."}>
+                {(resourceSlots ?? []).map((slot) => (
+                    <AdminCheck
+                        key={slot.id}
+                        id={`type-slot-${slot.id}`}
+                        label={slot.display_name}
+                        checked={resourceSlotIDS.includes(slot.id)}
+                        onChange={() => toggleSlot(slot.id)}
+                    />
+                ))}
+            </AdminCheckList>
+        </AdminFormDialog>
     ), setOpenExtra];
 };
 
@@ -165,23 +126,14 @@ const MachineTypes: React.FC = () => {
     const canDelete = hasPermission(UserPermission.CAN_DELETE_MACHINE_TYPES);
     const canEdit = hasPermission(UserPermission.CAN_EDIT_MACHINE_TYPES);
 
-    const [data, setData] = React.useState<MachineType[]>([]);
-    const columns: (keyof MachineType)[] = data.length > 0 ? (Object.keys(data[0]) as (keyof MachineType)[]).filter( (key) => !key.includes('_id') && key !== 'id' ) : [];
-    const [currentPage, setCurrentPage] = React.useState<number>(1);
-    
-    const fetchPage = (page: number) => {
-        const offset = (page - 1) * ITEMS_PER_PAGE;
-        OmniAPI.getAll("machinetypes", { limit: ITEMS_PER_PAGE, offset }).then( (mt) => {
-            setData(mt);
-            setCurrentPage(page);
-        });
-    };
+    const { data, currentPage, hasNext, loading, error, fetchPage, refresh: refreshPage } = usePagedList<MachineType>("machinetypes");
 
-    React.useEffect(() => {
-        fetchPage(1);
-    }, []);
-
-    const refreshPage = () => fetchPage(currentPage);
+    const columnDefs: ColumnDef<MachineType>[] = [
+        { key: 'name', label: 'Name', render: (t) => t.name },
+        { key: 'machines', label: 'Machines', render: (t) => String(t.num_machines ?? 0) },
+        { key: 'slots', label: 'Resource Slots', render: (t) => formatCell(t.resource_slot_names) },
+        { key: 'cost', label: 'Cost / Hour', render: (t) => `$${Number(t.cost_per_hour).toFixed(2)}` },
+    ];
 
     const onDelete = (index_local: number) => {
         if (!canDelete) {
@@ -203,7 +155,10 @@ const MachineTypes: React.FC = () => {
                 aemenu={ae}
             />
             <Table<MachineType>
-                columns={columns}
+                columnDefs={columnDefs}
+                loading={loading}
+                error={error}
+                hasNext={hasNext}
                 data={data}
                 onDelete={onDelete}
                 onEdit={(e) => setOpen(true, e)}

@@ -60,7 +60,7 @@ const Toolbar: React.FC<ToolbarProps> = ({highlightFailed, setHighlightFailed, a
 
     const handleEditClick = () => {
         // Navigate to the "Edit Machine" form
-        navigate("/myforge/machines");
+        navigate("/admin/machines");
     };
 
     const handleFailClick = () => {

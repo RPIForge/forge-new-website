@@ -1,12 +1,34 @@
-import React, { ReactNode, useEffect, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import '../styles/Table.scss';
-import { Pencil2Icon, TrashIcon, ArrowLeftIcon, ArrowRightIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, ArrowRightIcon } from '@radix-ui/react-icons';
+import editIcon from '../../../assets/img/icon-edit.svg?url';
+import deleteIcon from '../../../assets/img/icon-delete.svg?url';
 import { OmniAPI } from 'src/apis/OmniAPI';
 
+export interface ColumnDef<T> {
+    key: string;
+    label: string;
+    render: (row: T) => ReactNode;
+    // Plain text used for the hover tooltip
+    text?: (row: T) => string;
+}
+
 interface TableProps<T> {
-    columns: (keyof T)[];
+    columns?: (keyof T)[];
+    // Use instead of columns to show combined / formatted cells
+    columnDefs?: ColumnDef<T>[];
     data: T[];
+    loading?: boolean;
+    error?: string;
+    // When the parent already knows if there is another page, skip the extra request
+    hasNext?: boolean;
+    emptyMessage?: string;
+    // Smaller headers, and switches to stacked rows sooner, for tables with many columns
+    compact?: boolean;
+    // Makes each row clickable, e.g. to open a details view
+    onRowClick?: (row: T) => void;
+    rowLabel?: (row: T) => string;
     canEdit?: boolean;
     canDelete?: boolean;
     onEdit?: (activeItem: T) => void;
@@ -17,6 +39,73 @@ interface TableProps<T> {
 }
 
 export const ITEMS_PER_PAGE = 10;
+
+export const formatCell = (value: unknown): string => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
+    return String(value);
+};
+
+interface PagedListOptions<T> {
+    params?: Record<string, any>;
+    // Reshape each page after it loads (e.g. to add names looked up elsewhere)
+    transform?: (rows: any[]) => Promise<T[]> | T[];
+    enabled?: boolean;
+}
+
+// Loads one page at a time, asking for one extra row to know if there's a next page
+export function usePagedList<T>(type: string, options: PagedListOptions<T> = {}) {
+    const { params, transform, enabled = true } = options;
+    const [data, setData] = useState<T[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [hasNext, setHasNext] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const requestId = useRef(0);
+    const optionsRef = useRef({ params, transform });
+    optionsRef.current = { params, transform };
+
+    const fetchPage = useCallback(async (page: number) => {
+        const id = ++requestId.current;
+        setLoading(true);
+        setError('');
+        try {
+            const res = await OmniAPI.getAll(type, {
+                ...optionsRef.current.params,
+                limit: ITEMS_PER_PAGE + 1,
+                offset: (page - 1) * ITEMS_PER_PAGE,
+            });
+            const rows = Array.isArray(res) ? res : [];
+            const pageRows = rows.slice(0, ITEMS_PER_PAGE);
+            const shaped = optionsRef.current.transform ? await optionsRef.current.transform(pageRows) : (pageRows as T[]);
+            if (id !== requestId.current) return;
+            if (shaped.length === 0 && page > 1) {
+                fetchPage(page - 1);
+                return;
+            }
+            setData(shaped);
+            setHasNext(rows.length > ITEMS_PER_PAGE);
+            setCurrentPage(page);
+        } catch (err: any) {
+            if (id !== requestId.current) return;
+            const status = err?.response?.status;
+            setError(status === 401 || status === 403
+                ? "You don't have access to this list, or your session expired. Try signing in again."
+                : 'Could not load this list. Please try again.');
+        } finally {
+            if (id === requestId.current) setLoading(false);
+        }
+    }, [type]);
+
+    useEffect(() => {
+        if (enabled) fetchPage(1);
+    }, [fetchPage, enabled]);
+
+    const refresh = useCallback(() => fetchPage(currentPage), [fetchPage, currentPage]);
+
+    return { data, setData, currentPage, hasNext, loading, error, fetchPage, refresh };
+}
 
 function toTitle(snakeStr: string): string {
     return snakeStr
@@ -37,7 +126,8 @@ interface TableHeadProps<T> {
 
 // calls the api to delete an item from the database. type parameter is the backend type not frontend
 export function DeleteItem(type: string, obj: any, onSuccess: () => void) {
-    if (!confirm(`Really delete ${obj.name}?`)) return;
+    const label = obj.name ?? obj.display_name ?? obj.RCSID ?? 'this item';
+    if (!confirm(`Really delete ${label}?`)) return;
     OmniAPI.delete(type, obj.id)
         .then(() => {
             onSuccess();
@@ -55,7 +145,8 @@ export function TableHead<T>(props: TableHeadProps<T>) {
 }
 
 function Table<T>(props: TableProps<T>) {
-    const { columns, data, onDelete, onEdit, canEdit, canDelete } = props;
+    const { columns = [], columnDefs, data, onDelete, onEdit, canEdit, canDelete, loading, error, emptyMessage, compact, onRowClick, rowLabel } = props;
+    const hasNextProp = props.hasNext;
     const {
         currentPage: currentPageProp,
         onPageChange,
@@ -66,10 +157,12 @@ function Table<T>(props: TableProps<T>) {
     const hasEditOrDelete = !!(canEdit || hasDelete);
 
     const currentPage = currentPageProp ?? 1;
-    const [hasNext, setHasNext] = useState(false);
+    const [checkedHasNext, setHasNext] = useState(false);
+    const hasNext = hasNextProp ?? checkedHasNext;
 
     // check for next page by pulling next item 
     const checkHasNext = React.useCallback(() => {
+        if (hasNextProp !== undefined) return;
         if (!resourceType) {
             setHasNext(false);
             return;
@@ -79,17 +172,17 @@ function Table<T>(props: TableProps<T>) {
         OmniAPI.getAll(resourceType, {limit: 1, offset: nextOffset}).then(res => {
                 setHasNext(Array.isArray(res) && res.length > 0);
         }).catch(() => setHasNext(false));
-    }, [resourceType, currentPage]);
+    }, [resourceType, currentPage, hasNextProp]);
 
     useEffect(() => {
         checkHasNext();
     }, [checkHasNext, data]);
 
     useEffect(() => {
-        if (currentPage > 1 && data.length === 0) {
+        if (hasNextProp === undefined && !loading && currentPage > 1 && data.length === 0) {
             onPageChange?.(currentPage - 1);
         }
-    }, [data.length, currentPage]);
+    }, [data.length, currentPage, loading]);
 
 
     const handlePrevious = () => {
@@ -117,52 +210,78 @@ function Table<T>(props: TableProps<T>) {
         return () => window.removeEventListener('keydown', onKey);
     }, [currentPage, hasNext]);
 
+    const defs: ColumnDef<T>[] = columnDefs ?? columns.map((column) => ({
+        key: String(column),
+        label: toTitle(String(column)),
+        render: (row: T) => formatCell(row[column]),
+        text: (row: T) => formatCell(row[column]),
+    }));
+
+    if (error && data.length === 0) {
+        return <p className="table-message table-message--error" role="alert">{error}</p>;
+    }
+    if (loading && data.length === 0) {
+        return <p className="table-message" aria-busy="true">Loading…</p>;
+    }
     if (data.length === 0) {
-        return (
-            <div>
-                <br />
-                <i>No items are present.</i>
-            </div>
-        );
+        return <p className="table-message">{emptyMessage ?? 'No items are present.'}</p>;
     } else {
         return (
-            <div className="table-container">
-                <table className={hasEditOrDelete ? 'has-actions' : undefined}>
+            <div className={compact ? 'table-container is-compact' : 'table-container'}>
+                <table className={[hasEditOrDelete ? 'has-actions' : '', loading ? 'is-loading' : ''].join(' ').trim() || undefined}>
                     <thead>
                         <tr>
-                            {columns.map((column, index) => (
-                                <th key={String(column) + index}>{toTitle(String(column))}</th>
+                            {defs.map((def) => (
+                                <th key={def.key}>{def.label}</th>
                             ))}
                             {hasEditOrDelete && <th id="edit-col"></th>}
                         </tr>
                     </thead>
                     <tbody>
                         {data.map((row, rowIndex) => (
-                            <tr key={rowIndex}>
-                                {columns.map(column => {
-                                    const value = Array.isArray(row[column])
-                                        ? row[column].join(', ')
-                                        : String(row[column]);
-
+                            <tr
+                                key={rowIndex}
+                                className={onRowClick ? 'is-clickable' : undefined}
+                                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                                onKeyDown={onRowClick ? (e) => {
+                                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                                        e.preventDefault();
+                                        onRowClick(row);
+                                    }
+                                } : undefined}
+                                tabIndex={onRowClick ? 0 : undefined}
+                                aria-label={onRowClick && rowLabel ? rowLabel(row) : undefined}
+                            >
+                                {defs.map((def) => {
+                                    const content = def.render(row);
+                                    const title = def.text ? def.text(row) : (typeof content === 'string' ? content : undefined);
                                     return (
-                                        <td key={String(column)}>
-                                            <span className="cell-content" title={value}>{value}</span>
+                                        <td key={def.key} data-label={def.label}>
+                                            <span className="cell-content" title={title}>{content}</span>
                                         </td>
                                     );
                                 })}
                                 {hasEditOrDelete && (
                                     <td className="icon">
                                         {canEdit && (
-                                            <Pencil2Icon
+                                            <button
+                                                type="button"
                                                 className="edit"
-                                                onClick={() => onEdit?.(row)}
-                                            />
+                                                aria-label="Edit"
+                                                onClick={(e) => { e.stopPropagation(); onEdit?.(row); }}
+                                            >
+                                                <img src={editIcon} alt="" />
+                                            </button>
                                         )}
                                         {hasDelete && (
-                                            <TrashIcon
+                                            <button
+                                                type="button"
                                                 className="trash"
-                                                onClick={() => onDelete(rowIndex, rowIndex)}
-                                            />
+                                                aria-label="Delete"
+                                                onClick={(e) => { e.stopPropagation(); onDelete(rowIndex, rowIndex); }}
+                                            >
+                                                <img src={deleteIcon} alt="" />
+                                            </button>
                                         )}
                                     </td>
                                 )}

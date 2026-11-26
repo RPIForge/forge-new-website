@@ -10,6 +10,7 @@ import forgeLockupUrl from "../../assets/img/RPI_Lockup_Eng_Sm.svg?url";
 import forgeLogoUrl from "src/assets/img/forge-logo-blue.svg?url";
 import "./styles/UserMenu.scss";
 import "./styles/NavBar.scss";
+import { canUseAdmin } from '../Admin/adminSections';
 
 interface NavBarProps {
   user: User;
@@ -50,18 +51,14 @@ const UserMenu: React.FC<NavBarProps> = ({ user, isAuthed }) => {
   }
 };
 
-const ADMIN_PERMISSIONS = Object.values(UserPermission).filter(
-  (p) => p !== UserPermission.IS_SUPERUSER,
-);
-
+// The Admin link shows when the user can reach at least one admin section,
+// rather than only when they hold every single permission.
 const isAdmin = (user: User): boolean => {
   if (!Array.isArray(user?.permissions)) return false;
 
-  const isSuperuser = user.permissions.includes(UserPermission.IS_SUPERUSER);
-  if (isSuperuser) return true;
-
-  return ADMIN_PERMISSIONS.every((permission) =>
-    user.permissions.includes(permission),
+  return canUseAdmin((permission) =>
+    user.permissions.includes(permission) ||
+    user.permissions.includes(UserPermission.IS_SUPERUSER),
   );
 };
 
