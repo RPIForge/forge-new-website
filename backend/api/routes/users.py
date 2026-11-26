@@ -16,7 +16,7 @@ from models.machine_usage import MachineUsage
 from models.auth_token import AuthToken
 from models.role import Role
 from models.user import User
-from schemas.enums import LogType, Permissions, TokenType
+from schemas.enums import RESTRICTED_PERMISSIONS, LogType, Permissions, TokenType
 from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest, UserEditRequest, UserSelfEditRequest
 from schemas.responses import BasicUserResponse, UserNoHash
 
@@ -449,6 +449,53 @@ async def change_user_role(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Role with provided ID not found",
         )
+
+    # Damage-control permissions, enforced here for the first time. They have
+    # been defined since the enum was written but nothing checked them, so
+    # anyone who could change roles could hand out a lockout or strip one.
+    actor_permissions = await get_user_permissions(session, current_user.id)
+
+    if Permissions.IS_SUPERUSER not in actor_permissions:
+        target_permissions = await get_user_permissions(session, user.id)
+
+        if (
+            Permissions.ROLE_CHANGE_IMMUNE in target_permissions
+            and user.id != current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"{user.first_name} {user.last_name}'s roles can only be "
+                    "changed by themselves or a superuser"
+                ),
+            )
+
+        role_permissions = {
+            Permissions(permission)
+            for permission in [*role.permissions, *role.inverse_permissions]
+        }
+
+        if Permissions.LOCKOUT in role_permissions:
+            if Permissions.CAN_CONTROL_LOCKOUT not in actor_permissions:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Applying or removing a role that locks an account "
+                        "requires canControlLockout"
+                    ),
+                )
+
+        superuser_only = (role_permissions & RESTRICTED_PERMISSIONS) - {
+            Permissions.LOCKOUT
+        }
+        if superuser_only:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Only a superuser can assign or remove {role.name}, "
+                    "because of the permissions it carries"
+                ),
+            )
 
     if request.should_have_role:
         if not user.is_email_verified:
