@@ -475,16 +475,9 @@ async def change_user_role(
             for permission in [*role.permissions, *role.inverse_permissions]
         }
 
-        if Permissions.LOCKOUT in role_permissions:
-            if Permissions.CAN_CONTROL_LOCKOUT not in actor_permissions:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=(
-                        "Applying or removing a role that locks an account "
-                        "requires canControlLockout"
-                    ),
-                )
-
+        # Checked before lockout: the superuser role carries every
+        # permission, lockout included, and "only a superuser can assign
+        # Super Admin" is the reason it is refused -- not canControlLockout.
         superuser_only = (role_permissions & RESTRICTED_PERMISSIONS) - {
             Permissions.LOCKOUT
         }
@@ -496,6 +489,16 @@ async def change_user_role(
                     "because of the permissions it carries"
                 ),
             )
+
+        if Permissions.LOCKOUT in role_permissions:
+            if Permissions.CAN_CONTROL_LOCKOUT not in actor_permissions:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Applying or removing a role that locks an account "
+                        "requires canControlLockout"
+                    ),
+                )
 
     if request.should_have_role:
         if not user.is_email_verified:
