@@ -23,18 +23,27 @@ from schemas.enums import GenderStatsType, PronounType, Permissions
 # permissions, so an existing one is renamed rather than duplicated.
 BASE_ROLE_NAME = "Member"
 
+SUPERUSER_ROLE_NAME = "Super Admin"
+
+# The superuser is assumed to have every permission -- IS_SUPERUSER
+# short-circuits each check before the permission itself is looked at -- so
+# the role lists them all rather than leaving its list disagreeing with what
+# it can do. This is read off the enum, so a permission added later is
+# picked up on the next start.
+ALL_PERMISSIONS = [str(permission) for permission in Permissions]
+
 
 async def main() -> None:
     print("Start initial data")
     async with async_session() as session:
         superuser_role = await session.scalar(
-            select(Role).where(Role.name == "Super Admin")
+            select(Role).where(Role.name == SUPERUSER_ROLE_NAME)
         )
 
         if not superuser_role:
             superuser_role = Role(
-                name="Super Admin",
-                permissions=[Permissions.IS_SUPERUSER],
+                name=SUPERUSER_ROLE_NAME,
+                permissions=ALL_PERMISSIONS,
                 inverse_permissions=[],
                 display_role=False,
                 priority=10000,
@@ -44,9 +53,26 @@ async def main() -> None:
             await session.commit()
             await session.refresh(superuser_role)
 
-            print("Superuser role was created")
+            print(
+                f"Superuser role was created with all "
+                f"{len(ALL_PERMISSIONS)} permissions"
+            )
+        elif set(superuser_role.permissions) != set(ALL_PERMISSIONS):
+            # It was seeded with IS_SUPERUSER alone, so bring it up to date.
+            # Only the permission list is touched; priority, display and the
+            # members holding it are left as they are.
+            missing = sorted(set(ALL_PERMISSIONS) - set(superuser_role.permissions))
+            superuser_role.permissions = ALL_PERMISSIONS
+            session.add(superuser_role)
+            await session.commit()
+            await session.refresh(superuser_role)
+
+            print(
+                f"Superuser role: added {len(missing)} permissions it was "
+                f"missing, now holds all {len(ALL_PERMISSIONS)}"
+            )
         else:
-            print("Superuser role already exists in database")
+            print(f"Superuser role already holds all {len(ALL_PERMISSIONS)} permissions")
 
         MACHINE_USAGE_MINIMUM = [Permissions.CAN_USE_MACHINES, Permissions.CAN_SEE_MACHINES, Permissions.CAN_SEE_RESOURCE_SLOTS, Permissions.CAN_SEE_RESOURCES, Permissions.CAN_SEE_SEMESTERS]
 
