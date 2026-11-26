@@ -1,8 +1,8 @@
 from typing import Dict
 from httpx import AsyncClient, codes
-from sqlalchemy import any_, select
+from sqlalchemy import select
 
-from ..main import app
+from main import app
 from models import Role, User
 from .conftest import default_user_headers
 from schemas.enums import Permissions
@@ -53,7 +53,7 @@ async def test_has_superuser(
         (
             await session.scalar(
                 select(Role.name).where(
-                    Role.permissions.contains([Permissions.LOCKOUT])
+                    Role.permissions.op("@>")([Permissions.LOCKOUT])
                 )
             )
         )
@@ -139,7 +139,7 @@ async def test_has_exact_permission(
         (
             await session.scalar(
                 select(Role.name).where(
-                    Role.permissions.contains([Permissions.CAN_USE_MACHINES])
+                    Role.permissions.op("@>")([Permissions.CAN_USE_MACHINES])
                 )
             )
         )

@@ -31,6 +31,53 @@ services:
       - WATCHFILES_FORCE_POLLING=true
     volumes:
       - ./backend:/build
+  # Postgres for the test suite, kept apart from the dev database because
+  # tests/conftest.py drops and recreates every table. Credentials come from
+  # database/.env.test, the same file backend/.env's TEST_DATABASE_USER and
+  # TEST_DATABASE_PASSWORD already match.
+  #
+  # Behind the "test" profile, so a plain `docker compose up` leaves it alone.
+  test_database:
+    profiles:
+      - test
+    restart: unless-stopped
+    image: postgres:latest
+    environment:
+      # Uncomment the next line for Postgres 18+
+      PGDATA: /var/lib/postgresql/18/docker
+    volumes:
+      # For Postgres <18:
+      # - test_database_data:/var/lib/postgresql/data
+      # For Postgres 18+, comment the above and uncomment below:
+      - test_database_data:/var/lib/postgresql/18/docker
+    env_file:
+      - ./database/.env.test
+
+  # One-off test runner: `docker compose run --rm pytest`.
+  #
+  # Same image and ./backend mount as the backend service, but ENVIRONMENT
+  # is PYTEST so core/session.py builds the URI from the TEST_DATABASE_*
+  # values. backend/.env has the right user, password and database for
+  # test_database; it only names a host and port that make sense from the
+  # host machine, not from inside the compose network, so those two are
+  # overridden here.
+  pytest:
+    profiles:
+      - test
+    depends_on:
+      - test_database
+    build: ./backend
+    working_dir: /build
+    env_file:
+      - ./backend/.env
+    environment:
+      - ENVIRONMENT=PYTEST
+      - TEST_DATABASE_HOSTNAME=test_database
+      - TEST_DATABASE_PORT=5432
+    volumes:
+      - ./backend:/build
+    command: ["python", "-m", "pytest", "tests/", "-q"]
+
   frontend:
     restart: unless-stopped
     build: ./frontend

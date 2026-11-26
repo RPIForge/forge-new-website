@@ -6,6 +6,7 @@ https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html
 
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from . import config
 
@@ -22,5 +23,15 @@ print(
     f"{make_url(sqlalchemy_database_uri).render_as_string(hide_password=True)}"
 )
 
-async_engine = create_async_engine(sqlalchemy_database_uri, pool_pre_ping=True)
+engine_kwargs = {"pool_pre_ping": True}
+
+if config.settings.ENVIRONMENT == "PYTEST":
+    # pytest-asyncio gives each test its own event loop, and an asyncpg
+    # connection is bound to the loop that opened it. A pooled connection
+    # handed to a later test therefore fails with "got Future attached to a
+    # different loop". Not pooling at all under PYTEST costs a connection per
+    # checkout and makes the suite loop-agnostic.
+    engine_kwargs["poolclass"] = NullPool
+
+async_engine = create_async_engine(sqlalchemy_database_uri, **engine_kwargs)
 async_session = async_sessionmaker(async_engine, expire_on_commit=False)
