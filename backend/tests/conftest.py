@@ -6,7 +6,7 @@ from pydantic import SecretStr
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -47,7 +47,13 @@ async def test_db_setup_sessionmaker():
 
     # always drop and create test db tables between tests session
     async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # Not Base.metadata.drop_all: machines.active_usage_id and
+        # machine_usages.machine_id reference each other, so the DROPs cannot
+        # be ordered and SQLAlchemy raises CircularDependencyError. Dropping
+        # the schema sidesteps the ordering and also clears anything an
+        # earlier, half-finished run left behind.
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
         await conn.run_sync(Base.metadata.create_all)
 
 
@@ -88,7 +94,7 @@ async def default_user(test_db_setup_sessionmaker) -> User:
                 is_graduating=False,
                 checked_graduating=None,
                 is_rpi_staff=False,
-                active=False,
+                is_email_verified=True,
             )
             session.add(user)
             await session.commit()
