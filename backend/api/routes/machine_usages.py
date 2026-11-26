@@ -64,6 +64,7 @@ async def get_my_usages(
             cost=usage.cost,
             failed=usage.failed,
             failed_at=usage.failed_at,
+            is_reprint=usage.is_reprint,
         )
         for usage in machine_usages
     ]
@@ -99,6 +100,7 @@ async def get_my_usages(
             cost=usage.cost,
             failed=usage.failed,
             failed_at=usage.failed_at,
+            is_reprint=usage.is_reprint,
         )
         for usage in machine_usages
     ]

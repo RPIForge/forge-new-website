@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Annotated
 from azure.communication.email import EmailClient
@@ -19,10 +20,21 @@ from ..deps import DBSession, PermittedUserChecker
 router = APIRouter()
 
 
-async def send_failure_email(email, machine_name, percentage):
+async def send_failure_email(email, machine_name, percentage, error_message, noticeable_fault):
     client = EmailClient.from_connection_string(
         settings.AZURE_COMMUNICATION_CONNECTION_STRING
     )
+
+    # A print found past its expected finish time gives no reliable signal of
+    # where it actually failed, so the volunteer may not have supplied a
+    # percentage. Claiming a number we cannot know would be worse than silence.
+    if percentage is None:
+        opening = f"Unfortunately, your machine usage on {machine_name} has failed."
+    else:
+        opening = (
+            f"Unfortunately, your machine usage on {machine_name} "
+            f"has failed at {percentage}%."
+        )
 
 
     message = {
@@ -33,7 +45,10 @@ async def send_failure_email(email, machine_name, percentage):
         "content": {
             "subject": "Your Machine Usage Failed",
             "plainText": (
-                f"Unfortunately, your machine usage on {machine_name} has failed at {percentage}%. You may want to stop by the Forge soon. If you used Forge filament, one reprint is free."
+                opening + "\n\n"
+                f"Reason given: {error_message or 'No reason given'}\n"
+                f"Noticeable faults: {noticeable_fault or 'None reported'}\n\n"
+                "You may want to stop by the Forge soon. If you used Forge filament, one reprint is free."
             ),
         },
     }
@@ -119,6 +134,12 @@ async def fail_machine(
             detail="This machine does not have an active usage",
         )
 
+    if machine.active_usage.failed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This machine's usage has already been failed",
+        )
+
     audit_log = AuditLog(
         type=LogType.MACHINE_USAGE_FAILED,
         content={
@@ -126,7 +147,9 @@ async def fail_machine(
             "user_rcsid": current_user.RCSID,
             "error_message": request.error_message,
             "noticeable_fault": request.noticeable_fault,
-            "percentage": str(request.percentage),
+            "percentage": (
+                str(request.percentage) if request.percentage is not None else None
+            ),
         },
     )
     session.add(audit_log)
@@ -136,9 +159,18 @@ async def fail_machine(
     session.add(machine)
     await session.commit()
 
-    await send_failure_email(
-        f"{machine.active_usage.user.RCSID}@rpi.edu",
-        machine.name,
-        str(request.percentage),
-    )
+    try:
+        await send_failure_email(
+            f"{machine.active_usage.user.RCSID}@rpi.edu",
+            machine.name,
+            request.percentage,
+            request.error_message,
+            request.noticeable_fault,
+        )
+    except Exception:
+        logging.exception("Failed to send machine failure email")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The machine was marked as failed, but the email to the user could not be sent.",
+        )
 

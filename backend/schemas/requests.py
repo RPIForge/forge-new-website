@@ -18,11 +18,11 @@ class BaseRequest(BaseModel):
 
 
 class UserCreateRequest(BaseRequest):
-    RCSID: str
+    RCSID: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9]+$")
     RIN: RIN
 
-    first_name: str
-    last_name: str
+    first_name: str = Field(min_length=1)
+    last_name: str = Field(min_length=1)
 
     major: str
     gender_identity: GenderStatsType
@@ -33,6 +33,31 @@ class UserCreateRequest(BaseRequest):
 
     is_graduating: bool
 
+
+class UserEditRequest(BaseRequest):
+    is_rpi_staff: Optional[bool]
+
+    RCSID: Optional[str]
+    RIN: Optional[RIN]
+
+    first_name: Optional[str]
+    last_name: Optional[str]
+
+    major: Optional[str]
+    gender_identity: Optional[GenderStatsType]
+
+    pronouns: Optional[PronounType]
+
+    is_graduating: Optional[bool]
+
+class UserSelfEditRequest(BaseRequest):
+    first_name: Optional[str]
+    last_name: Optional[str]
+
+    major: Optional[str]
+    gender_identity: Optional[GenderStatsType]
+
+    pronouns: Optional[PronounType]
 
 class UserUpdatePasswordRequest(BaseRequest):
     password: SecretStr
@@ -94,7 +119,8 @@ class MachineUsageRequest(BaseRequest):
     # Map resource slot id to resource usage quantity details
     resource_usages: dict[UUID4, ResourceUsage]
     duration_seconds: int
-    as_org_id: Optional[UUID4]
+    as_org_id: Optional[UUID4] = None
+    is_reprint: bool = False
 
 
 class MachineGetTypeRequest(BaseRequest):
@@ -127,13 +153,14 @@ class MachineFailRequest(BaseRequest):
     machine_id: UUID4
     error_message: str
     noticeable_fault: str
-    percentage: Decimal = Field(ge=0, le=100)
+    # Optional: when a print is found past its expected finish time there is no
+    # reliable way to know where it actually failed, so the volunteer may leave
+    # this blank and the failure email then omits the percentage entirely.
+    percentage: Decimal | None = Field(default=None, ge=0, le=100)
 
 
 class ResourceCreateRequest(BaseRequest):
     name: str
-    brand: Optional[str]
-    color: Optional[str]
     units: str
     cost: Decimal = Field(max_digits=10, decimal_places=5)
 
@@ -144,8 +171,6 @@ class ResourceGetRequest(BaseRequest):
 
 class ResourceEditRequest(BaseRequest):
     name: str
-    brand: Optional[str]
-    color: Optional[str]
     units: str
     cost: Decimal = Field(max_digits=10, decimal_places=5)
 

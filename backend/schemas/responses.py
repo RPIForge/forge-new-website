@@ -1,8 +1,7 @@
 from datetime import datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Optional
-from pydantic import BaseModel, ConfigDict, UUID4, Field
-
+from decimal import Decimal, ROUND_HALF_UP
+from pydantic import BaseModel, ConfigDict, UUID4, Field, field_validator
 from .enums import GenderStatsType, LogType, PronounType, SemesterType
 
 
@@ -40,6 +39,12 @@ class UserChargeResponse(BaseResponse):
     first_name: str
     last_name: str
     semester_balance: Decimal = Field(max_digits=10, decimal_places=2)
+
+    @field_validator("semester_balance", mode="before")
+    @classmethod
+    def round_balance(cls, v):
+        return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
     is_graduating: bool
 
 
@@ -71,6 +76,11 @@ class UserNoHash(BaseModel):
     checked_graduating: UUID4 | None
 
     semester_balance: Decimal = Field(max_digits=10, decimal_places=2)
+
+    @field_validator("semester_balance", mode="before")
+    @classmethod
+    def round_balance(cls, v):
+        return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 class MachineStatus(BaseResponse):
@@ -112,8 +122,6 @@ class MachineInfoGroupDetails(MachineInfoGroup):
 class ResourceInfo(BaseModel):
     id: UUID4
     name: str
-    brand: Optional[str]
-    color: Optional[str]
     units: str
     cost: Decimal = Field(max_digits=10, decimal_places=5)
 
@@ -211,6 +219,7 @@ class UsageResponse(BaseResponse):
     cost: Decimal
     failed: bool = False
     failed_at: Optional[datetime] = None
+    is_reprint: bool = False
 
 
 class MachineInfo(BaseModel):
