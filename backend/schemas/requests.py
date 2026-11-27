@@ -96,9 +96,6 @@ class MachineUsageRequest(BaseRequest):
     duration_seconds: int
     as_org_id: Optional[UUID4] = None
     is_reprint: bool = False
-    # The failed print this reprint claims. Optional: a client that only sends
-    # is_reprint still gets the newest claimable failure picked for it.
-    reprint_of_id: Optional[UUID4] = None
 
 
 class MachineGetTypeRequest(BaseRequest):

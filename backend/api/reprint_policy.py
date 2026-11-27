@@ -31,9 +31,14 @@ from models.user import User
 # You have a failed print that hasn't already been reprinted. Each failure earns one free reprint, and once claimed it's spent.
 # That failed print used Forge filament, not your own.
 # That failed print used under 100g. Exactly 100g does not qualify.
-# That failed print was not itself a reprint. One free reprint per original
-#   print, so a free reprint that fails does not earn another one.
+# That failed print did not itself get a free reprint. One free reprint per
+#   original print, so a free reprint that fails does not earn another one.
+#   A reprint the member was charged full price for is an ordinary paid print
+#   and earns one like any other: they paid for it, and ticking the box is not
+#   something they should be out of pocket for later.
 # The reprint is no larger than the failed print, plus a small allowance for re-slicing, and never more than 105g.
+# The failure happened this semester. Past usage is kept but does not carry
+#   into the current term, so a failure from last semester earns nothing now.
 # The 25% cap is NOT checked here. It is cumulative over the semester and
 #   reconciled when the charge sheet is generated, because a member whose first
 #   print fails is at 100% that day and may be well under by December.
@@ -42,11 +47,11 @@ from models.user import User
 # published policy, which states only the under-100g rule, so that nobody slices
 # to exactly the limit. The code being more generous here is intended, not a bug.
 
-# Claiming a print that has already been reprinted is refused outright rather
-# than charged. Every other way of missing out is still charged with an
-# explanation: those are judgements about material and size the member may not
-# have been able to predict, whereas claiming the same failure twice is a
-# mistake about which print they meant, and silently charging for it is no help.
+# The member does not say which failure they are claiming. Ticking the reprint
+# box is the whole of it, and the newest failure that qualifies is claimed for
+# them. Missing out is charged with an explanation rather than refused: the
+# judgements about material and size are ones the member could not have been
+# expected to make, so the usage is logged and the reason comes back with it.
 
 GRAM_UNITS = {"g", "gram", "grams"}
 FAILED_PRINT_MAX_GRAMS = Decimal("100")
@@ -56,12 +61,13 @@ REPRINT_SHARE_CAP = Decimal("0.25")
 
 CHARGED = "Charged as a normal print: "
 
-# Said both by the check in _load_named_failure and by the unique index that
-# backs it, so the member gets the same words whichever one catches it.
+# Said by the unique index on reprint_of_id, which is the only thing that can
+# catch this: the failure is chosen from the unclaimed ones a moment earlier,
+# so getting here means another submission took it in between.
 ALREADY_CLAIMED = (
-    "That print has already been reprinted for free. Each failed print earns "
-    "one free reprint, so pick a different failure or submit this as a normal "
-    "print."
+    "The failed print this would have claimed was just claimed by another "
+    "submission. Nothing was logged -- submit again and the next failure will "
+    "be used."
 )
 
 
@@ -83,12 +89,24 @@ def forge_gram_total(quantities: list[ResourceUsageQuantity]) -> Decimal:
     )
 
 
-def claimable_failures_query(user_id: UUID):
+def claimable_failures_query(user_id: UUID, semester_id: UUID | None):
     """Select the member's failed prints that can still earn a free reprint.
 
+    Bounded to one semester. Past usage is kept, but it does not reach into
+    the current term: a print that failed last semester earns nothing now,
+    the same way last semester's cost does not show up in this balance.
+    Between semesters there is no active semester, and usages logged then
+    have no semester either, so those match each other.
+
     Excludes failures that have already been claimed, and failures that were
-    themselves reprints: one free reprint per original print, so a reprint that
-    fails does not earn another one and the member pays for the next attempt.
+    themselves granted free: one free reprint per original print, so a free
+    reprint that fails does not earn another one and the member pays for the
+    next attempt.
+
+    The test for that is reprint_of_id, not is_reprint. is_reprint only says
+    the member ticked the box; it is still set when the claim was refused and
+    they were charged full price. Such a print is paid for like any other and
+    earns its own free reprint if it fails.
     """
     already_claimed = select(MachineUsage.reprint_of_id).where(
         MachineUsage.reprint_of_id.is_not(None)
@@ -96,8 +114,9 @@ def claimable_failures_query(user_id: UUID):
     return (
         select(MachineUsage)
         .where(MachineUsage.user_id == user_id)
+        .where(MachineUsage.semester_id == semester_id)
         .where(MachineUsage.failed.is_(True))
-        .where(MachineUsage.is_reprint.is_(False))
+        .where(MachineUsage.reprint_of_id.is_(None))
         .where(MachineUsage.id.not_in(already_claimed))
         .options(
             selectinload(MachineUsage.resources_used).selectinload(
@@ -135,71 +154,22 @@ def judge_failure(candidate: MachineUsage) -> tuple[Decimal, str | None]:
     return failed_grams, None
 
 
-async def _load_named_failure(
-    session, current_user: User, reprint_of_id: UUID
-) -> MachineUsage:
-    """Load the failure the member said they are reprinting.
-
-    Refuses rather than charges: these are all mistakes about *which* print is
-    being claimed, and the member should fix the selection instead of paying
-    for a print they expected to be free.
-    """
-    usage = await session.scalar(
-        select(MachineUsage)
-        .where(MachineUsage.id == reprint_of_id)
-        .options(
-            selectinload(MachineUsage.resources_used).selectinload(
-                ResourceUsageQuantity.resource
-            ),
-            selectinload(MachineUsage.machine).selectinload(Machine.type),
-        )
-    )
-
-    if usage is None or usage.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="That failed print isn't one of yours.",
-        )
-
-    if not usage.failed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="That print didn't fail, so there's no free reprint to claim.",
-        )
-
-    claimed_by = await session.scalar(
-        select(MachineUsage.id).where(MachineUsage.reprint_of_id == usage.id)
-    )
-    # Not the last word on it: the check and the insert are not atomic, so the
-    # unique index on reprint_of_id catches anything that races past here.
-    if claimed_by is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ALREADY_CLAIMED,
-        )
-
-    return usage
-
-
 async def evaluate_free_reprint(
     session,
     current_user: User,
     semester_id: UUID | None,
     requested_quantities: list[ResourceUsageQuantity],
     machine: Machine,
-    reprint_of_id: UUID | None = None,
 ) -> tuple[MachineUsage | None, str | None]:
-    """Decide whether this reprint is free.
+    """Decide whether this reprint is free, and against which failure.
 
     Returns (failed usage being claimed, None) when it is free, or
     (None, reason) when it is charged. The reason names the actual numbers so
     the form can explain the charge rather than just applying it silently.
 
-    Raises 400 when the member named a failure that cannot be claimed at all:
-    somebody else's, one that did not fail, or one already reprinted.
-
-    reprint_of_id is optional so a client that only sends is_reprint still
-    works; the newest claimable failure is picked for it.
+    The member does not choose the failure. Theirs are walked newest first and
+    the first that qualifies is claimed, so the usual case -- a print failed,
+    they ran it again -- needs nothing from them but the tick.
     """
     if not machine.type.allows_free_reprints:
         return None, (CHARGED + "free reprints don't apply to this kind of machine.")
@@ -211,55 +181,38 @@ async def evaluate_free_reprint(
             CHARGED + "free reprints only cover Forge filament measured in grams."
         )
 
-    if reprint_of_id is not None:
-        named = await _load_named_failure(session, current_user, reprint_of_id)
-
-        # Charged, not refused: the member picked a real failure of theirs, it
-        # just earns nothing. Chain-stopping is a limit of the policy, not a
-        # mis-selection they should go back and correct.
-        if named.is_reprint:
-            return None, (
-                CHARGED + "that print was itself a reprint, and only an "
-                "original print earns a free reprint."
+    candidates = (
+        await session.scalars(
+            claimable_failures_query(current_user.id, semester_id).order_by(
+                MachineUsage.failed_at.desc().nullslast()
             )
+        )
+    ).all()
 
-        failed_grams, reason = judge_failure(named)
-        if reason is not None:
-            return None, CHARGED + reason
-        failed_usage = named
-    else:
-        candidates = (
-            await session.scalars(
-                claimable_failures_query(current_user.id).order_by(
-                    MachineUsage.failed_at.desc().nullslast()
-                )
-            )
-        ).all()
+    if not candidates:
+        return None, (
+            CHARGED + "you have no failed print left to claim this semester. "
+            "Either nothing of yours has failed, or the failure already "
+            "earned its free reprint."
+        )
 
-        if not candidates:
-            return None, (
-                CHARGED + "you have no failed print left to claim. Either nothing "
-                "of yours has failed, or the failure already earned its free "
-                "reprint."
-            )
+    # Most recent failure that qualifies. Candidates are newest first, so when
+    # none qualify we report why the newest one didn't -- that is the failure
+    # the member is most likely asking about.
+    failed_usage = None
+    failed_grams = Decimal(0)
+    first_reason = None
+    for candidate in candidates:
+        grams, reason = judge_failure(candidate)
+        if reason is None:
+            failed_usage, failed_grams = candidate, grams
+            break
+        first_reason = first_reason or reason
 
-        # Most recent failure that qualifies. Candidates are newest first, so
-        # when none qualify we report why the newest one didn't -- that is the
-        # failure the member is most likely asking about.
-        failed_usage = None
-        failed_grams = Decimal(0)
-        first_reason = None
-        for candidate in candidates:
-            grams, reason = judge_failure(candidate)
-            if reason is None:
-                failed_usage, failed_grams = candidate, grams
-                break
-            first_reason = first_reason or reason
-
-        if failed_usage is None:
-            return None, CHARGED + (
-                first_reason or "you have no failed print left to claim."
-            )
+    if failed_usage is None:
+        return None, CHARGED + (
+            first_reason or "you have no failed print left to claim this semester."
+        )
 
     allowance = min(failed_grams * RESLICE_BUFFER, REPRINT_MAX_GRAMS)
     if requested_grams > allowance:

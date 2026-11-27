@@ -232,7 +232,7 @@ async def use_a_machine(
     if request.is_reprint:
         reprint_of, reprint_note = await evaluate_free_reprint(
             session, current_user, current_semester.id if current_semester else None,
-            resource_usage_quantities, machine, request.reprint_of_id,
+            resource_usage_quantities, machine,
         )
         if reprint_of is not None:
             total_cost = 0
@@ -257,9 +257,9 @@ async def use_a_machine(
         await session.rollback()
         if reprint_of is None:
             raise
-        # The unique index on reprint_of_id caught a free reprint that was
-        # granted against a failure someone else claimed between the policy
-        # check and this commit. Same answer the check itself would give.
+        # The unique index on reprint_of_id caught a free reprint granted
+        # against a failure that another submission claimed between the pick
+        # and this commit. Rare, and submitting again picks the next one.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ALREADY_CLAIMED,

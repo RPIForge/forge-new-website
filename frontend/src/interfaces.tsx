@@ -17,6 +17,10 @@ export interface User {
     checked_graduating: string | null;
     is_email_verified: boolean;
     semester_balance: string;
+    // Part of semester_balance, and also reported on its own: the charts sum
+    // logged costs, which cannot include it, so the page shows it separately
+    // rather than leaving the two figures to disagree.
+    reprint_overage: string;
 };
 
 export const defaultUser: User = {
@@ -35,6 +39,7 @@ export const defaultUser: User = {
     checked_graduating: null,
     is_email_verified: false,
     semester_balance: '',
+    reprint_overage: '',
 };
 
 export interface UserCharge {
@@ -161,15 +166,3 @@ export interface ResourceSlot {
     allow_own_material: boolean;
     allow_empty: boolean;
 };
-
-// A failed print the member can still claim a free reprint against. Each
-// failed print earns one free reprint, so the form makes them say which one.
-export interface ClaimableFailure {
-    id: string;
-    machine_name: string;
-    time_started: string;
-    failed_at: string | null;
-    forge_grams: number | string;
-    eligible: boolean;
-    reason: string | null;
-}
