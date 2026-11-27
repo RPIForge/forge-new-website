@@ -29,20 +29,22 @@ export const FailAMachineForm: React.FC = () => {
         fetchMachines();
     }, []);
 
-    const [inProgressIds, setInProgressIds] = useState<Set<string>>(new Set());
+    // The machines the backend would accept a failure for: in use, or cleared
+    // recently enough that the print they just ran can still be failed. Asking
+    // the backend keeps this list and its rule in one place.
+    const [failableIds, setFailableIds] = useState<Set<string>>(new Set());
 
-    const loadInProgress = () => {
-        OmniAPI.getPublic("machinestatus").then((res: any) => {
-            const all = [...(res?.loners ?? []), ...(res?.groups ?? []).flatMap((g: any) => g.machines ?? [])];
-            setInProgressIds(new Set(all.filter((m: any) => m.in_use).map((m: any) => m.id)));
-        }).catch(() => setInProgressIds(new Set()));
+    const loadFailable = () => {
+        OmniAPI.getAll("failable-machines").then((ids: string[]) => {
+            setFailableIds(new Set(ids));
+        }).catch(() => setFailableIds(new Set()));
     };
 
     useEffect(() => {
-        loadInProgress();
+        loadFailable();
     }, []);
 
-    const failableMachines = machines.filter((machine) => inProgressIds.has(machine.id));
+    const failableMachines = machines.filter((machine) => failableIds.has(machine.id));
 
     /**
      * Handle Machine Selection with placeholder protection
@@ -91,7 +93,7 @@ export const FailAMachineForm: React.FC = () => {
             if (error?.response?.status !== 502) return;
         } finally {
             setIsSubmitting(false);
-            loadInProgress();
+            loadFailable();
         }
         
         // Clear form
@@ -123,7 +125,7 @@ export const FailAMachineForm: React.FC = () => {
                     onChange={(e) => handleSelectMachine(e.target.value)}
                     required
                 >
-                    <option className='styled-dropdown-placeholder' value="_" hidden>{failableMachines.length ? "Please Select a Machine" : "No machines are in use"}</option>
+                    <option className='styled-dropdown-placeholder' value="_" hidden>{failableMachines.length ? "Please Select a Machine" : "No machines can be failed right now"}</option>
                     {failableMachines.map((machine: Machine) => (
                         <option className='styled-dropdown-option' key={machine.id} value={machine.id}>{machine.name}</option>
                     ))}
