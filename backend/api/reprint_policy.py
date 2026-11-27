@@ -55,6 +55,14 @@ REPRINT_SHARE_CAP = Decimal("0.25")
 
 CHARGED = "Charged as a normal print: "
 
+# Said both by the check in _load_named_failure and by the unique index that
+# backs it, so the member gets the same words whichever one catches it.
+ALREADY_CLAIMED = (
+    "That print has already been reprinted for free. Each failed print earns "
+    "one free reprint, so pick a different failure or submit this as a normal "
+    "print."
+)
+
 
 def forge_gram_total(quantities: list[ResourceUsageQuantity]) -> Decimal:
     """Grams of Forge filament in a set of usage quantities.
@@ -161,14 +169,12 @@ async def _load_named_failure(
     claimed_by = await session.scalar(
         select(MachineUsage.id).where(MachineUsage.reprint_of_id == usage.id)
     )
+    # Not the last word on it: the check and the insert are not atomic, so the
+    # unique index on reprint_of_id catches anything that races past here.
     if claimed_by is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "That print has already been reprinted for free. Each failed "
-                "print earns one free reprint, so pick a different failure or "
-                "submit this as a normal print."
-            ),
+            detail=ALREADY_CLAIMED,
         )
 
     return usage

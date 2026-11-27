@@ -53,6 +53,10 @@ export const DynamicMachineForm: React.FC = () => {
     // fetched once the reprint box is ticked, since most usages aren't reprints.
     const [claimableFailures, setClaimableFailures] = useState<ClaimableFailure[]>([]);
     const [failuresLoaded, setFailuresLoaded] = useState<boolean>(false);
+    // Kept apart from an empty list: "the fetch failed" and "you have nothing
+    // to claim" look identical otherwise, and the second is a claim we would
+    // be making about the member's charges without knowing it to be true.
+    const [failuresError, setFailuresError] = useState<boolean>(false);
     const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>([{
         slot_id: "_",
         name: "_",
@@ -98,11 +102,11 @@ export const DynamicMachineForm: React.FC = () => {
                 const failures: ClaimableFailure[] = await OmniAPI.getAll("usages/me/claimable-failures");
                 console.log("Claimable failures:", failures);
                 setClaimableFailures(failures);
+                setFailuresError(false);
             } catch (error) {
-                // Not fatal: the member can still submit without choosing, and
-                // the backend falls back to the newest claimable failure.
                 console.log("Failed to load claimable failures", error);
                 setClaimableFailures([]);
+                setFailuresError(true);
             }
             setFailuresLoaded(true);
         };
@@ -202,6 +206,13 @@ export const DynamicMachineForm: React.FC = () => {
 
         if (!formData.policy) {
             updateStatus("Please accept the usage policy.", "error");
+            return;
+        }
+
+        if (formData.reprint && failuresError) {
+            // Submitting now would send no failure id, and the backend would
+            // pick one for them -- the guessing this picker exists to replace.
+            updateStatus("Your failed prints couldn't be loaded, so this can't be claimed as a reprint yet. Try again, or untick the reprint box to submit it as a normal print.", "error");
             return;
         }
 
@@ -455,7 +466,18 @@ export const DynamicMachineForm: React.FC = () => {
                         </label>
                         {formData.reprint &&
                             <div className="reprint-claim">
-                                {claimableFailures.length === 0
+                                {failuresError
+                                    ? <p className="reprint-claim-note">
+                                        Your failed prints couldn&apos;t be loaded, so there is
+                                        nothing to choose from yet.{" "}
+                                        <button
+                                            type="button"
+                                            onClick={() => { setFailuresError(false); setFailuresLoaded(false); }}
+                                        >
+                                            Try again
+                                        </button>
+                                    </p>
+                                    : claimableFailures.length === 0
                                     ? <p className="reprint-claim-note">
                                         You have no failed print left to claim. Each failed print
                                         earns one free reprint, so this will be charged as a normal

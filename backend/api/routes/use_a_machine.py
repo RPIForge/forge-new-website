@@ -17,11 +17,12 @@ from models.state import State
 from schemas.requests import MachineUsageRequest
 
 from ..deps import DBSession, PermittedUserChecker
-from ..reprint_policy import evaluate_free_reprint
+from ..reprint_policy import ALREADY_CLAIMED, evaluate_free_reprint
 from models.user import User
 from schemas.enums import LogType, Permissions
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 router = APIRouter()
@@ -250,7 +251,19 @@ async def use_a_machine(
 
     session.add(machine_usage)
     session.add(machine)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        if reprint_of is None:
+            raise
+        # The unique index on reprint_of_id caught a free reprint that was
+        # granted against a failure someone else claimed between the policy
+        # check and this commit. Same answer the check itself would give.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ALREADY_CLAIMED,
+        )
     await session.refresh(machine_usage)
     
     audit_log = AuditLog(
