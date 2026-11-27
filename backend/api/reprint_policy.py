@@ -5,6 +5,7 @@ when a usage is submitted, and the 25% cap when the semester's charge sheet is
 generated.
 """
 
+from collections.abc import Sequence
 from decimal import Decimal
 from uuid import UUID
 
@@ -271,10 +272,10 @@ async def evaluate_free_reprint(
     return failed_usage, None
 
 
-async def semester_reprint_overage(
-    session, user_id: UUID, semester_id: UUID
-) -> Decimal:
-    """Cost of free-reprint filament beyond the member's 25% allowance.
+async def semester_reprint_overages(
+    session, user_ids: Sequence[UUID], semester_id: UUID | None
+) -> dict[UUID, Decimal]:
+    """Cost of free-reprint filament beyond each member's 25% allowance.
 
     The cap is cumulative and only meaningful once the semester is over: a
     member whose very first print fails is at 100% that day, and may be far
@@ -284,47 +285,81 @@ async def semester_reprint_overage(
     Free reprints are walked oldest first and stay free until the allowance is
     used up; whatever spills past it is charged at the price recorded on that
     usage, not today's price. Only the portion over the line is charged.
+
+    Batched deliberately: every member who is listed anywhere alongside a
+    balance needs this, so it is two queries for the whole set rather than two
+    per row. Every id asked for comes back, zero included, so callers can index
+    the result without checking.
     """
+    if semester_id is None:
+        return {}
+
+    user_ids = list(dict.fromkeys(user_ids))
+    if not user_ids:
+        return {}
+
     gram_filter = (
         ResourceUsageQuantity.is_own_material.is_(False),
         func.lower(func.trim(Resource.units)).in_(GRAM_UNITS),
     )
 
-    total_grams = await session.scalar(
-        select(func.coalesce(func.sum(ResourceUsageQuantity.amount), 0))
-        .join(MachineUsage, MachineUsage.id == ResourceUsageQuantity.machine_usage_id)
-        .join(Resource, Resource.id == ResourceUsageQuantity.resource_id)
-        .where(MachineUsage.user_id == user_id)
-        .where(MachineUsage.semester_id == semester_id)
-        .where(*gram_filter)
-    )
-    allowance = Decimal(total_grams or 0) * REPRINT_SHARE_CAP
+    total_rows = (
+        await session.execute(
+            select(
+                MachineUsage.user_id,
+                func.coalesce(func.sum(ResourceUsageQuantity.amount), 0),
+            )
+            .join(MachineUsage, MachineUsage.id == ResourceUsageQuantity.machine_usage_id)
+            .join(Resource, Resource.id == ResourceUsageQuantity.resource_id)
+            .where(MachineUsage.user_id.in_(user_ids))
+            .where(MachineUsage.semester_id == semester_id)
+            .where(*gram_filter)
+            .group_by(MachineUsage.user_id)
+        )
+    ).all()
+    allowances = {
+        user_id: Decimal(total or 0) * REPRINT_SHARE_CAP
+        for user_id, total in total_rows
+    }
 
     # reprint_of_id is set only on reprints that were actually granted free, so
     # a reprint the member already paid for doesn't count against them twice.
     rows = (
         await session.execute(
-            select(ResourceUsageQuantity.amount, ResourceUsageQuantity.cpu_at_usage)
+            select(
+                MachineUsage.user_id,
+                ResourceUsageQuantity.amount,
+                ResourceUsageQuantity.cpu_at_usage,
+            )
             .join(MachineUsage, MachineUsage.id == ResourceUsageQuantity.machine_usage_id)
             .join(Resource, Resource.id == ResourceUsageQuantity.resource_id)
-            .where(MachineUsage.user_id == user_id)
+            .where(MachineUsage.user_id.in_(user_ids))
             .where(MachineUsage.semester_id == semester_id)
             .where(MachineUsage.reprint_of_id.is_not(None))
             .where(*gram_filter)
-            .order_by(MachineUsage.time_started)
+            .order_by(MachineUsage.user_id, MachineUsage.time_started)
         )
     ).all()
 
-    used = Decimal(0)
-    overage = Decimal(0)
-    for amount, cpu_at_usage in rows:
+    used: dict[UUID, Decimal] = {}
+    overages: dict[UUID, Decimal] = {}
+    for user_id, amount, cpu_at_usage in rows:
         amount = Decimal(amount)
-        free_remaining = allowance - used
-        if free_remaining >= amount:
-            used += amount
-            continue
-        chargeable = amount - max(free_remaining, Decimal(0))
-        overage += chargeable * Decimal(cpu_at_usage)
-        used += amount
+        consumed = used.get(user_id, Decimal(0))
+        free_remaining = allowances.get(user_id, Decimal(0)) - consumed
+        if free_remaining < amount:
+            chargeable = amount - max(free_remaining, Decimal(0))
+            overages[user_id] = overages.get(user_id, Decimal(0)) + chargeable * Decimal(
+                cpu_at_usage
+            )
+        used[user_id] = consumed + amount
 
-    return overage
+    return {user_id: overages.get(user_id, Decimal(0)) for user_id in user_ids}
+
+
+async def semester_reprint_overage(
+    session, user_id: UUID, semester_id: UUID | None
+) -> Decimal:
+    """The overage for one member. See semester_reprint_overages."""
+    overages = await semester_reprint_overages(session, [user_id], semester_id)
+    return overages.get(user_id, Decimal(0))

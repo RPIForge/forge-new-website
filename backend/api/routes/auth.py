@@ -15,6 +15,7 @@ from schemas.enums import LogType, Permissions
 from schemas.responses import AccessTokenResponse, UserNoHash
 
 from ..deps import DBSession, PermittedUserChecker
+from ..reprint_policy import semester_reprint_overage
 from ..utils import get_user_permissions
 
 from core.security import create_token_response, verify_password
@@ -103,6 +104,9 @@ async def get_current_user(
         if current_semester_id
         else 0.0
     )
+    reprint_overage = await semester_reprint_overage(
+        session, current_user.id, current_semester_id
+    )
 
     return UserNoHash(
         id=current_user.id,
@@ -125,5 +129,8 @@ async def get_current_user(
         is_graduating=current_user.is_graduating,
         is_email_verified=current_user.is_email_verified,
         checked_graduating=current_user.checked_graduating,
-        semester_balance=Decimal(semester_balance),
+        # The overage is part of what the member owes, so it is folded into
+        # the balance and also reported on its own so the UI can break it out.
+        semester_balance=Decimal(semester_balance) + reprint_overage,
+        reprint_overage=reprint_overage,
     )

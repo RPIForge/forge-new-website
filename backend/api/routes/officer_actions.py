@@ -16,7 +16,7 @@ from schemas.requests import ActivateSemesterRequest, GetChargeSheetsRequest
 from schemas.responses import CreateResponse, UserChargeResponse
 
 from ..deps import DBSession, PermittedUserChecker
-from ..reprint_policy import semester_reprint_overage
+from ..reprint_policy import semester_reprint_overages
 
 router = APIRouter()
 
@@ -157,10 +157,9 @@ async def get_charge_sheet(
 
     # The reprint cap is cumulative over the semester, so it is settled here
     # rather than when each usage was logged.
-    overages = {
-        user.id: await semester_reprint_overage(session, user.id, semester.id)
-        for user in users
-    }
+    overages = await semester_reprint_overages(
+        session, [user.id for user in users], semester.id
+    )
 
     charges = []
     for user in users:
