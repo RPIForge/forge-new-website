@@ -10,7 +10,7 @@ from models.state import State
 
 from ..deps import DBSession, PermittedUserChecker
 from ..reprint_policy import semester_reprint_overage, semester_reprint_overages
-from ..utils import get_user_permissions
+from ..utils import get_user_permissions, highest_priority_display_role
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
@@ -18,13 +18,14 @@ from models.auth_token import AuthToken
 from models.role import Role
 from models.user import User
 from schemas.enums import LogType, Permissions, TokenType
-from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest
+from schemas.requests import UserCreateRequest, UserAddRoleRequest, UserUpdateGraduationRequest, VerificationTokenRequest, UserEditRequest, UserSelfEditRequest
 from schemas.responses import BasicUserResponse, UserNoHash
 
 from core.security import get_password_hash
 from .verifications import create_email_token
 
 router = APIRouter()
+
 
 async def get_semester_balance(
     session: DBSession,
@@ -150,13 +151,7 @@ async def get_user_by_rcsid(
         gender_identity=user.gender_identity,
         pronouns=user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(user.roles),
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
@@ -200,13 +195,7 @@ async def get_user_by_rin(
         gender_identity=user.gender_identity,
         pronouns=user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(user.roles),
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
@@ -313,13 +302,7 @@ async def get_all_users(
             gender_identity=user.gender_identity,
             pronouns=user.pronouns,
             permissions=user_permissions[user.id],
-            display_role=next((
-                    role.name 
-                    for role in user.roles 
-                    if role.display_role
-                ), 
-                ""
-            ),
+            display_role=highest_priority_display_role(user.roles),
             is_graduating=user.is_graduating,
             is_email_verified=user.is_email_verified,
             checked_graduating=user.checked_graduating,
@@ -375,13 +358,7 @@ async def edit_user_graduation(
         gender_identity=current_user.gender_identity,
         pronouns=current_user.pronouns,
         permissions=user_permissions,
-        display_role=next((
-                role.name 
-                for role in current_user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(current_user.roles),
         is_graduating=current_user.is_graduating,
         checked_graduating=current_user.checked_graduating,
         is_email_verified=current_user.is_email_verified,
@@ -457,13 +434,7 @@ async def get_users_by_role(
             gender_identity=user.gender_identity,
             pronouns=user.pronouns,
             permissions=user_permissions[user.id],
-            display_role=next((
-                    role.name 
-                    for role in user.roles 
-                    if role.display_role
-                ), 
-                ""
-            ),
+            display_role=highest_priority_display_role(user.roles),
             is_graduating=user.is_graduating,
             is_email_verified=user.is_email_verified,
             checked_graduating=user.checked_graduating,
@@ -530,7 +501,109 @@ async def change_user_role(
 # GET ALL USERS
 
 # EDIT USER PREFERENCES
+@router.post("/users/edit")
+async def edit_self(
+    request: UserSelfEditRequest,
+    session: DBSession,
+    current_user: Annotated[
+        User, Depends(PermittedUserChecker({Permissions.CAN_EDIT_SELF}))
+    ]
+) -> None:
+    user = await session.scalar(
+        select(User).where(User.id == current_user.id)
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with provided ID not found",
+        )
+
+    if request.first_name is not None:
+        user.first_name = request.first_name
+    if request.last_name is not None:
+        user.last_name = request.last_name
+    if request.major is not None:
+        user.major = request.major
+    if request.gender_identity is not None:
+        user.gender_identity = request.gender_identity
+    if request.pronouns is not None:
+        user.pronouns = request.pronouns
+
+    await session.commit()
+
 
 # EDIT USER SECURE DETAILS
+@router.post("/users/edit/{user_id}")
+async def edit_user(
+    user_id: UUID,
+    request: UserEditRequest,
+    session: DBSession,
+    current_user: Annotated[
+        User, Depends(PermittedUserChecker({Permissions.CAN_EDIT_USERS}))
+    ],
+) -> None:
+    """Edit another user's details"""
+
+    user = await session.scalar(
+        select(User).where(User.id == user_id)
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with provided ID not found",
+        )
+
+    conflicting_users = await session.scalar(
+        select(User).where(and_(or_(User.RCSID == request.RCSID, User.RIN == request.RIN), User.id != user.id))
+    )
+    if conflicting_users is not None:
+        raise HTTPException(
+            status_code=409, 
+            detail="A user with that RCSID or RIN already exists",
+        )
+
+    needs_audit_log = False
+
+    logContent = dict()
+
+    if request.is_rpi_staff is not None:
+        user.is_rpi_staff = request.is_rpi_staff
+    if request.RCSID is not None:
+        if user.RCSID != request.RCSID:
+            needs_audit_log = True
+            logContent["target_old_rcsid"] = user.RCSID
+            logContent["target_new_rcsid"] = request.RCSID
+        user.RCSID = request.RCSID
+    if request.RIN is not None:
+        if user.RIN != request.RIN:
+            needs_audit_log = True
+            logContent["target_old_rin"] = user.RIN
+            logContent["target_new_rin"] = request.RIN
+        user.RIN = request.RIN
+    if request.first_name is not None:
+        user.first_name = request.first_name
+    if request.last_name is not None:
+        user.last_name = request.last_name
+    if request.major is not None:
+        user.major = request.major
+    if request.gender_identity is not None:
+        user.gender_identity = request.gender_identity
+    if request.pronouns is not None:
+        user.pronouns = request.pronouns
+    if request.is_graduating is not None:
+        user.is_graduating = request.is_graduating
+
+    if needs_audit_log:
+        logContent["user_rcsid"] = current_user.RCSID
+        audit_log = AuditLog(
+            type=LogType.USER_EDITED,
+            content=logContent,
+        )
+
+        session.add(audit_log)
+
+    await session.commit()
+
 
 # HARD DELETE USER

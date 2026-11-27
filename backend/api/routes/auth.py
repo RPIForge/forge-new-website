@@ -16,7 +16,7 @@ from schemas.responses import AccessTokenResponse, UserNoHash
 
 from ..deps import DBSession, PermittedUserChecker
 from ..reprint_policy import semester_reprint_overage
-from ..utils import get_user_permissions
+from ..utils import get_user_permissions, highest_priority_display_role
 
 from core.security import create_token_response, verify_password
 
@@ -119,13 +119,7 @@ async def get_current_user(
         gender_identity=current_user.gender_identity,
         pronouns=current_user.pronouns,
         permissions=current_user_permissions,
-        display_role=next((
-                role.name 
-                for role in current_user.roles 
-                if role.display_role
-            ), 
-            ""
-        ),
+        display_role=highest_priority_display_role(current_user.roles),
         is_graduating=current_user.is_graduating,
         is_email_verified=current_user.is_email_verified,
         checked_graduating=current_user.checked_graduating,

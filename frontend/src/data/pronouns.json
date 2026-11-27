@@ -1,0 +1,10 @@
+{"Pronouns": [
+    {"Pronouns": "she_her", "Display Value": "She/Her"},
+    {"Pronouns": "she_they", "Display Value": "She/They"},
+    {"Pronouns": "they_them", "Display Value": "They/Them"},
+    {"Pronouns": "he_they", "Display Value": "He/They"},
+    {"Pronouns": "he_him", "Display Value": "He/Him"},
+    {"Pronouns": "all_any", "Display Value": "Any/All"},
+    {"Pronouns": "use_name", "Display Value": "Just Use Name"},
+    {"Pronouns": "not_shown", "Display Value": "Don't Show"}
+]}

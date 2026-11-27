@@ -14,6 +14,7 @@ from models.machine_usage import MachineUsage
 from models.user import User
 from schemas.enums import LogType, Permissions
 from schemas.requests import MachineFailRequest
+from schemas.responses import FailableMachineResponse
 
 from ..auto_clear import FAIL_WINDOW, usage_finished_at
 from ..deps import DBSession, PermittedUserChecker
@@ -21,10 +22,21 @@ from ..deps import DBSession, PermittedUserChecker
 router = APIRouter()
 
 
-async def send_failure_email(email, machine_name, percentage):
+async def send_failure_email(email, machine_name, percentage, error_message, noticeable_fault):
     client = EmailClient.from_connection_string(
         settings.AZURE_COMMUNICATION_CONNECTION_STRING
     )
+
+    # A print found past its expected finish time gives no reliable signal of
+    # where it actually failed, so the volunteer may not have supplied a
+    # percentage. Claiming a number we cannot know would be worse than silence.
+    if percentage is None:
+        opening = f"Unfortunately, your machine usage on {machine_name} has failed."
+    else:
+        opening = (
+            f"Unfortunately, your machine usage on {machine_name} "
+            f"has failed at {percentage}%."
+        )
 
 
     message = {
@@ -35,7 +47,10 @@ async def send_failure_email(email, machine_name, percentage):
         "content": {
             "subject": "Your Machine Usage Failed",
             "plainText": (
-                f"Unfortunately, your machine usage on {machine_name} has failed at {percentage}%. You may want to stop by the Forge soon. If you used Forge filament, one reprint is free."
+                opening + "\n\n"
+                f"Reason given: {error_message or 'No reason given'}\n"
+                f"Noticeable faults: {noticeable_fault or 'None reported'}\n\n"
+                "You may want to stop by the Forge soon. If you used Forge filament, one reprint is free."
             ),
         },
     }
@@ -126,12 +141,14 @@ async def get_failable_machines(
     current_user: Annotated[
         User, Depends(PermittedUserChecker({Permissions.CAN_FAIL_MACHINES}))
     ],
-) -> list[UUID4]:
-    """The machines POST /fail would accept right now.
+) -> list[FailableMachineResponse]:
+    """The machines POST /fail would accept right now, and the usage each one
+    would fail.
 
     In use, or released within FAIL_WINDOW of finishing with the print still
     recorded as a success. The fail form offers exactly these, so a machine
-    auto-clear released overnight is still on the list in the morning.
+    auto-clear released overnight is still on the list in the morning, and it
+    reads the usage to decide whether the print is past its expected finish.
     """
     machines = (
         await session.scalars(
@@ -141,11 +158,20 @@ async def get_failable_machines(
         )
     ).all()
 
-    busy = [m for m in machines if m.active_usage is not None]
+    def entry(machine_id: UUID4, usage: MachineUsage) -> FailableMachineResponse:
+        return FailableMachineResponse(
+            machine_id=machine_id,
+            usage_start=usage.time_started,
+            usage_duration=usage.duration_seconds,
+        )
+
+    failable = [
+        entry(m.id, m.active_usage)
+        for m in machines
+        if m.active_usage is not None and not m.active_usage.failed
+    ]
+
     idle_ids = [m.id for m in machines if m.active_usage is None]
-
-    failable = [m.id for m in busy if not m.active_usage.failed]
-
     if idle_ids:
         # One row per machine: its most recent usage.
         latest = (
@@ -158,7 +184,7 @@ async def get_failable_machines(
         ).all()
         now = datetime.now(UTC)
         failable += [
-            usage.machine_id
+            entry(usage.machine_id, usage)
             for usage in latest
             if not usage.failed and now - usage_finished_at(usage) <= FAIL_WINDOW
         ]
@@ -219,7 +245,9 @@ async def fail_machine(
             "user_rcsid": current_user.RCSID,
             "error_message": request.error_message,
             "noticeable_fault": request.noticeable_fault,
-            "percentage": str(request.percentage),
+            "percentage": (
+                str(request.percentage) if request.percentage is not None else None
+            ),
             # Recorded after the machine had already been released, so the
             # usage this was pinned to was a judgement rather than a given.
             "after_clear": after_clear,
@@ -236,7 +264,9 @@ async def fail_machine(
         await send_failure_email(
             f"{usage.user.RCSID}@rpi.edu",
             machine.name,
-            str(request.percentage),
+            request.percentage,
+            request.error_message,
+            request.noticeable_fault,
         )
     except Exception:
         logging.exception("Failed to send machine failure email")

@@ -247,6 +247,19 @@ class UsageResponse(BaseResponse):
     is_reprint: bool = False
 
 
+class FailableMachineResponse(BaseResponse):
+    """A machine a volunteer can fail right now, and the usage it would fail.
+
+    The usage is carried so the form can judge how far along the print should
+    be. A machine auto-clear has already released is past its expected finish
+    by definition, which is what makes the percentage optional there.
+    """
+
+    machine_id: UUID4
+    usage_start: datetime
+    usage_duration: int
+
+
 class MachineInfo(BaseModel):
     id: UUID4
     name: str

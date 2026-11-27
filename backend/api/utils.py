@@ -11,6 +11,19 @@ from models.user import User
 from schemas.enums import Permissions
 
 
+def highest_priority_display_role(roles: list[Role]) -> str:
+    """Name of the highest-priority role marked as a display role, or "".
+
+    models/role.py defines the displayed role as "the highest priority role
+    with display_role set". Lives here because both /me in auth.py and the
+    user endpoints need it, and they were previously out of step.
+    """
+    display_roles = [role for role in roles if role.display_role]
+    if not display_roles:
+        return ""
+    return max(display_roles, key=lambda role: role.priority).name
+
+
 async def get_user_permissions(session: AsyncSession, user_id: UUID):
     user = (
         await session.scalars(

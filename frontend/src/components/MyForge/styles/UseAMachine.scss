@@ -145,6 +145,15 @@
 
 }
 
+.percent-hint {
+    display: block;
+    max-width: 42ch;
+    margin: 0.35rem 0 0.25rem;
+    color: #555;
+    font-size: 1.5vh;
+    line-height: 1.4;
+}
+
 .usage-duration > input {
     padding: 5px;
     border: 1px solid #ccc;
