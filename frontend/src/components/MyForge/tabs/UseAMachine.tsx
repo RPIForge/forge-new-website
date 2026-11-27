@@ -209,9 +209,16 @@ export const DynamicMachineForm: React.FC = () => {
             return;
         }
 
+        // An empty list on its own means nothing: it is also what loading and
+        // failing look like. Submitting in either of those states would send
+        // no failure id and have the backend pick one -- the guessing this
+        // picker exists to replace -- so neither is allowed through.
+        if (formData.reprint && !failuresLoaded) {
+            updateStatus("Still loading your failed prints. Give it a moment and submit again.", "error");
+            return;
+        }
+
         if (formData.reprint && failuresError) {
-            // Submitting now would send no failure id, and the backend would
-            // pick one for them -- the guessing this picker exists to replace.
             updateStatus("Your failed prints couldn't be loaded, so this can't be claimed as a reprint yet. Try again, or untick the reprint box to submit it as a normal print.", "error");
             return;
         }
@@ -476,6 +483,10 @@ export const DynamicMachineForm: React.FC = () => {
                                         >
                                             Try again
                                         </button>
+                                    </p>
+                                    : !failuresLoaded
+                                    ? <p className="reprint-claim-note">
+                                        Loading your failed prints...
                                     </p>
                                     : claimableFailures.length === 0
                                     ? <p className="reprint-claim-note">
