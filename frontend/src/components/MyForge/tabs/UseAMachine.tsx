@@ -1,7 +1,7 @@
 import React, { useEffect, useState, ChangeEvent, FormEvent, ReactNode, Suspense, useMemo, createContext, useContext } from "react";
 import { OmniAPI } from "src/apis/OmniAPI";
 import { CheckboxInput, CustomForm, CustomFormField, DropdownInput, FormIcon, TextInput } from "src/components/Forms/Form";
-import { emptyMachine, Machine, Resource } from "src/interfaces";
+import { ClaimableFailure, emptyMachine, Machine, Resource } from "src/interfaces";
 import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom"
 import '../../Forms/styles/Form.scss';
@@ -48,7 +48,11 @@ export const DynamicMachineForm: React.FC = () => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState<string>("0");
     const [schema, setSchema] = useState<MachineSchemaResponse>({});
-    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, reprint: false });
+    const [formData, setFormData] = useState<{ [key: string]: any }>({ hours: 0, minutes: 0, policy: false, reprint: false, reprint_of_id: "" });
+    // Failed prints this member can still claim a free reprint against. Only
+    // fetched once the reprint box is ticked, since most usages aren't reprints.
+    const [claimableFailures, setClaimableFailures] = useState<ClaimableFailure[]>([]);
+    const [failuresLoaded, setFailuresLoaded] = useState<boolean>(false);
     const [slotValues, setSlotValues] = useState<ResourceSlotElement[]>([{
         slot_id: "_",
         name: "_",
@@ -76,6 +80,45 @@ export const DynamicMachineForm: React.FC = () => {
 
         fetchMachines();
     }, []);
+
+
+    /**
+     * Fetch Claimable Failed Prints when the reprint box is ticked
+     *
+     * Each failed print earns exactly one free reprint, so the member has to
+     * say which failure they are claiming. The backend refuses a print that
+     * has already been reprinted rather than quietly charging for it, which it
+     * can only do if it knows which print was meant.
+     */
+    useEffect(() => {
+        if (!formData.reprint || failuresLoaded) return;
+
+        const fetchClaimableFailures = async () => {
+            try {
+                const failures: ClaimableFailure[] = await OmniAPI.getAll("usages/me/claimable-failures");
+                console.log("Claimable failures:", failures);
+                setClaimableFailures(failures);
+            } catch (error) {
+                // Not fatal: the member can still submit without choosing, and
+                // the backend falls back to the newest claimable failure.
+                console.log("Failed to load claimable failures", error);
+                setClaimableFailures([]);
+            }
+            setFailuresLoaded(true);
+        };
+
+        fetchClaimableFailures();
+    }, [formData.reprint, failuresLoaded]);
+
+
+    /**
+     * Why the chosen failure wouldn't be free, when it wouldn't be. Shown
+     * before submitting so the charge isn't a surprise afterwards.
+     */
+    const selectedFailureReason = useMemo(() => {
+        const chosen = claimableFailures.find((failure) => failure.id === formData.reprint_of_id);
+        return chosen && !chosen.eligible ? chosen.reason : null;
+    }, [claimableFailures, formData.reprint_of_id]);
 
 
     /**
@@ -162,6 +205,11 @@ export const DynamicMachineForm: React.FC = () => {
             return;
         }
 
+        if (formData.reprint && claimableFailures.length > 0 && !formData.reprint_of_id) {
+            updateStatus("Please choose which failed print this is a reprint of.", "error");
+            return;
+        }
+
         console.log(slotValues);
 
         const resource_usages: { [key: string]: { resource_id: string, amount: number, is_own_material: boolean } } = {};
@@ -182,6 +230,9 @@ export const DynamicMachineForm: React.FC = () => {
             duration_seconds: duration_seconds,
             resource_usages: resource_usages,
             is_reprint: formData.reprint,
+            // Null rather than "" so the backend falls back to picking the
+            // newest claimable failure when nothing was chosen.
+            reprint_of_id: formData.reprint && formData.reprint_of_id ? formData.reprint_of_id : null,
         };
 
         console.log("Usage Data:", usageData);
@@ -402,6 +453,38 @@ export const DynamicMachineForm: React.FC = () => {
                         >
                             Is this a reprint?
                         </label>
+                        {formData.reprint &&
+                            <div className="reprint-claim">
+                                {claimableFailures.length === 0
+                                    ? <p className="reprint-claim-note">
+                                        You have no failed print left to claim. Each failed print
+                                        earns one free reprint, so this will be charged as a normal
+                                        print.
+                                    </p>
+                                    : <>
+                                        <label htmlFor='reprint-of' className='checkbox-label'>
+                                            <span style={{ color: 'red' }}>*</span>
+                                            Which failed print is this a reprint of?
+                                        </label>
+                                        <select
+                                            id='reprint-of'
+                                            value={formData.reprint_of_id}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, 'reprint_of_id': e.target.value }))}
+                                        >
+                                            <option value="">Select a failed print...</option>
+                                            {claimableFailures.map((failure) => (
+                                                <option key={failure.id} value={failure.id}>
+                                                    {`${failure.machine_name} - ${new Date(failure.failed_at ?? failure.time_started).toLocaleDateString()} - ${Number(failure.forge_grams).toFixed(1)}g${failure.eligible ? "" : " (will be charged)"}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {selectedFailureReason &&
+                                            <p className="reprint-claim-note">{selectedFailureReason}</p>
+                                        }
+                                    </>
+                                }
+                            </div>
+                        }
                     </div>
                 }
 

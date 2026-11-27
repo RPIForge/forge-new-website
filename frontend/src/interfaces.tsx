@@ -161,3 +161,15 @@ export interface ResourceSlot {
     allow_own_material: boolean;
     allow_empty: boolean;
 };
+
+// A failed print the member can still claim a free reprint against. Each
+// failed print earns one free reprint, so the form makes them say which one.
+export interface ClaimableFailure {
+    id: string;
+    machine_name: string;
+    time_started: string;
+    failed_at: string | null;
+    forge_grams: number | string;
+    eligible: boolean;
+    reason: string | null;
+}

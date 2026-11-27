@@ -231,7 +231,7 @@ async def use_a_machine(
     if request.is_reprint:
         reprint_of, reprint_note = await evaluate_free_reprint(
             session, current_user, current_semester.id if current_semester else None,
-            resource_usage_quantities, machine,
+            resource_usage_quantities, machine, request.reprint_of_id,
         )
         if reprint_of is not None:
             total_cost = 0

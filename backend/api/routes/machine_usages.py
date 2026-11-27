@@ -7,9 +7,10 @@ from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
 from models.machine import Machine
 from models.machine_usage import MachineUsage
-from schemas.responses import UsageResponse
+from schemas.responses import ClaimableFailureResponse, UsageResponse
 
 from ..deps import DBSession, PermittedUserChecker
+from ..reprint_policy import claimable_failures_query, judge_failure
 from models.user import User
 
 router = APIRouter()
@@ -97,4 +98,45 @@ async def get_my_usages(
             is_reprint=usage.is_reprint,
         )
         for usage in machine_usages
+    ]
+
+
+@router.get("/usages/me/claimable-failures")
+async def get_my_claimable_failures(
+    session: DBSession,
+    current_user: Annotated[
+        User, Depends(PermittedUserChecker(set()))
+    ],
+) -> list[ClaimableFailureResponse]:
+    """Failed prints the member can still claim a free reprint against.
+
+    Drives the picker on the Use a Machine form. Failures that are already
+    spent, and failures that were themselves reprints, are left out entirely.
+    Ones that are listed but would not be free carry the reason, so the
+    member sees the charge coming instead of reading about it afterwards.
+    """
+
+    failures = (
+        await session.scalars(
+            claimable_failures_query(current_user.id).order_by(
+                MachineUsage.failed_at.desc().nullslast()
+            )
+        )
+    ).all()
+
+    return [
+        ClaimableFailureResponse(
+            id=failure.id,
+            machine_name=(
+                failure.machine.name if failure.machine else "Unknown machine"
+            ),
+            time_started=failure.time_started,
+            failed_at=failure.failed_at,
+            forge_grams=grams,
+            eligible=reason is None,
+            reason=reason,
+        )
+        for failure, (grams, reason) in (
+            (failure, judge_failure(failure)) for failure in failures
+        )
     ]

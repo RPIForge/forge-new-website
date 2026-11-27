@@ -239,6 +239,23 @@ class UsageResponse(BaseResponse):
     is_reprint: bool = False
 
 
+class ClaimableFailureResponse(BaseResponse):
+    """A failed print the member can still claim a free reprint against.
+
+    eligible is False when the failure can be picked but would not be free,
+    so the form can explain the charge before the usage is submitted rather
+    than after it.
+    """
+
+    id: UUID4
+    machine_name: str
+    time_started: datetime
+    failed_at: Optional[datetime] = None
+    forge_grams: Decimal
+    eligible: bool
+    reason: Optional[str] = None
+
+
 class MachineInfo(BaseModel):
     id: UUID4
     name: str
