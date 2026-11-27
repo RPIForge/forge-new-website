@@ -56,9 +56,13 @@ class UserChargeResponse(BaseResponse):
     # allowance, so the charge can be explained rather than just applied.
     reprint_overage: Decimal = Field(default=Decimal(0), max_digits=10, decimal_places=2)
 
-    @field_validator("semester_balance", mode="before")
+    # Both are money. semester_balance is a sum that can carry the full
+    # DECIMAL(x,5) precision of the usages behind it, and reprint_overage is
+    # amount * cpu_at_usage, so neither arrives at 2 places on its own and
+    # decimal_places below rejects rather than rounds.
+    @field_validator("semester_balance", "reprint_overage", mode="before")
     @classmethod
-    def round_balance(cls, v):
+    def round_money(cls, v):
         return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     is_graduating: bool
@@ -96,9 +100,13 @@ class UserNoHash(BaseModel):
     # allowance, so the charge can be explained rather than just applied.
     reprint_overage: Decimal = Field(default=Decimal(0), max_digits=10, decimal_places=2)
 
-    @field_validator("semester_balance", mode="before")
+    # Both are money. semester_balance is a sum that can carry the full
+    # DECIMAL(x,5) precision of the usages behind it, and reprint_overage is
+    # amount * cpu_at_usage, so neither arrives at 2 places on its own and
+    # decimal_places below rejects rather than rounds.
+    @field_validator("semester_balance", "reprint_overage", mode="before")
     @classmethod
-    def round_balance(cls, v):
+    def round_money(cls, v):
         return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
