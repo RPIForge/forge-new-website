@@ -22,6 +22,14 @@ const Summary: React.FC = () => {
     const graduationPromptHandled = useRef(false);
     const [showEmailVerificationPrompt, setShowEmailVerificationPrompt] = useState(false);
 
+    // Kept apart from machineUsages: the charts below are scoped to the active
+    // semester, while the history list stays all-time. They sum the cost logged
+    // against each usage, so they fall short of Semester Cost by the reprint
+    // overage -- a free reprint is logged at zero and the 25% cap is settled
+    // afterwards. That is why the overage is shown beside the total instead of
+    // being folded in where nothing would account for the gap.
+    const [semesterUsages, setSemesterUsages] = React.useState<MachineUsage[]>([]);
+
     const [costData, setCostData] = React.useState<ChartUsageData[]>([]);
     const [hoursData, setHoursData] = React.useState<ChartUsageData[]>([]);
 
@@ -100,13 +108,34 @@ const Summary: React.FC = () => {
             }
         };
 
+        // This semester only, and paged: a member with more than one page of
+        // usages would otherwise have their totals cut off at the first 20.
+        // Between semesters there is no active one, so the charts show nothing
+        // rather than last term's figures.
+        const getSemesterUsages = async () => {
+            try {
+                const semester = await OmniAPI.get("semesters", "current").catch(() => null);
+                if (!semester?.id) {
+                    setSemesterUsages([]);
+                    return;
+                }
+                const data: MachineUsage[] = await OmniAPI.getEvery("usages/me", { semester_id: semester.id });
+                setSemesterUsages(data);
+            } catch (error) {
+                console.error("Error fetching this semester's machine usages:", error);
+                setSemesterUsages([]);
+            }
+        };
+
         getUsages();
+        getSemesterUsages();
         refreshUser();
     }, []);
     
     useEffect(() => {
-        if (machineUsages.length === 0) return;
-    
+        // No early return on an empty list: a new semester starts with nothing
+        // logged, and the charts have to fall to zero rather than keep showing
+        // the last semester they had data for.
         const getChartData = (usages: MachineUsage[]) => {
             const sums = usages.reduce((acc, usage) => {
                 const machine = usage.machine_name;
@@ -132,8 +161,8 @@ const Summary: React.FC = () => {
             })));
         };
     
-        getChartData(machineUsages);
-    }, [machineUsages]);
+        getChartData(semesterUsages);
+    }, [semesterUsages]);
 
     useEffect(() => {
         if (machineUsages.length === 0) return;
@@ -209,6 +238,9 @@ const Summary: React.FC = () => {
             </Dialog.Root>
             <div className='mf-flex-row' style={rowStyle} >
                 <DisplayObject id='cost' name='Semester Cost' semester_cost={user.semester_balance} />
+                {Number(user.reprint_overage) > 0 &&
+                    <DisplayObject id='overage' name='Reprint Overage' semester_cost={user.reprint_overage} />
+                }
                 <SingleObject id='current' name='Current Usage' value={currentUsage} count={currentUsageCount} /> 
             </div>
             <div className='mf-flex-row' style={rowStyle}>
@@ -255,7 +287,7 @@ const ListObject = ({ id, name, value }: ListObjectProps) => {
 interface DisplayObjectProps {
     id: string;
     name: string;
-    semester_cost: string;
+    semester_cost: string | number;
 }
 
 const DisplayObject = ({ id, name, semester_cost }: DisplayObjectProps) => {
@@ -327,6 +359,10 @@ const ChartObject = ({ id, name, unit, value }: ChartObjectProps) => {
     return (
         <div className='mf-chart mf-component' style={chartStyle}>
             <h1>{name}</h1>
+            {value.length === 0 &&
+                <h2>No usage this semester</h2>
+            }
+            {value.length > 0 &&
             <div className='mf-chart-container'>
                 <ul className='mf-chart-legend'>
                     {value.map((item: any, index: number) => {
@@ -354,6 +390,7 @@ const ChartObject = ({ id, name, unit, value }: ChartObjectProps) => {
                     labelPosition={65}
                 />
             </div>
+            }
         </div>
     );
 }

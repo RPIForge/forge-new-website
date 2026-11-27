@@ -17,6 +17,10 @@ export interface User {
     checked_graduating: string | null;
     is_email_verified: boolean;
     semester_balance: string;
+    // Part of semester_balance, and also reported on its own: the charts sum
+    // logged costs, which cannot include it, so the page shows it separately
+    // rather than leaving the two figures to disagree.
+    reprint_overage: string;
 };
 
 export const defaultUser: User = {
@@ -35,6 +39,7 @@ export const defaultUser: User = {
     checked_graduating: null,
     is_email_verified: false,
     semester_balance: '',
+    reprint_overage: '',
 };
 
 export interface UserCharge {
@@ -42,6 +47,7 @@ export interface UserCharge {
     first_name: string;
     last_name: string;
     semester_balance: string | number;
+    reprint_overage: string | number;
     is_graduating: boolean;
 }
 
@@ -83,6 +89,7 @@ export interface MachineType {
     resource_slots: number;
     count: number;
     cost_per_hour: number;
+    allows_free_reprints: boolean;
     resource_slot_ids: string[];
     resource_types: string[];
 };

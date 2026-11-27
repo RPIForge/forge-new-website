@@ -23,6 +23,19 @@ class AccessTokenResponse(BaseResponse):
     issued_at: int
     
 
+class MachineUsageResult(BaseResponse):
+    """Outcome of logging a usage.
+
+    reprint_note is set when a usage was marked as a reprint but didn't qualify
+    for a free one, explaining why it was charged. Not qualifying isn't an
+    error, so the charge has to be explained in the success path.
+    """
+
+    cost: Decimal
+    free_reprint: bool = False
+    reprint_note: Optional[str] = None
+
+
 class VerificationTokenResponse(BaseResponse):
     token_type: str
     success: bool
@@ -39,10 +52,17 @@ class UserChargeResponse(BaseResponse):
     first_name: str
     last_name: str
     semester_balance: Decimal = Field(max_digits=10, decimal_places=2)
+    # The part of semester_balance that came from exceeding the free-reprint
+    # allowance, so the charge can be explained rather than just applied.
+    reprint_overage: Decimal = Field(default=Decimal(0), max_digits=10, decimal_places=2)
 
-    @field_validator("semester_balance", mode="before")
+    # Both are money. semester_balance is a sum that can carry the full
+    # DECIMAL(x,5) precision of the usages behind it, and reprint_overage is
+    # amount * cpu_at_usage, so neither arrives at 2 places on its own and
+    # decimal_places below rejects rather than rounds.
+    @field_validator("semester_balance", "reprint_overage", mode="before")
     @classmethod
-    def round_balance(cls, v):
+    def round_money(cls, v):
         return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     is_graduating: bool
@@ -76,10 +96,17 @@ class UserNoHash(BaseModel):
     checked_graduating: UUID4 | None
 
     semester_balance: Decimal = Field(max_digits=10, decimal_places=2)
+    # The part of semester_balance that came from exceeding the free-reprint
+    # allowance, so the charge can be explained rather than just applied.
+    reprint_overage: Decimal = Field(default=Decimal(0), max_digits=10, decimal_places=2)
 
-    @field_validator("semester_balance", mode="before")
+    # Both are money. semester_balance is a sum that can carry the full
+    # DECIMAL(x,5) precision of the usages behind it, and reprint_overage is
+    # amount * cpu_at_usage, so neither arrives at 2 places on its own and
+    # decimal_places below rejects rather than rounds.
+    @field_validator("semester_balance", "reprint_overage", mode="before")
     @classmethod
-    def round_balance(cls, v):
+    def round_money(cls, v):
         return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
@@ -175,6 +202,7 @@ class MachineTypeInfo(BaseModel):
     resource_slot_names: set[str]
     resource_slot_ids: list[UUID4]
     cost_per_hour: Decimal
+    allows_free_reprints: bool = False
 
 
 class MachineTypeDetails(MachineTypeInfo):
@@ -217,6 +245,19 @@ class UsageResponse(BaseResponse):
     machine_name: str
     cost: Decimal
     is_reprint: bool = False
+
+
+class FailableMachineResponse(BaseResponse):
+    """A machine a volunteer can fail right now, and the usage it would fail.
+
+    The usage is carried so the form can judge how far along the print should
+    be. A machine auto-clear has already released is past its expected finish
+    by definition, which is what makes the percentage optional there.
+    """
+
+    machine_id: UUID4
+    usage_start: datetime
+    usage_duration: int
 
 
 class MachineInfo(BaseModel):

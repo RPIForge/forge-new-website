@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload, InstrumentedAttribute
 from models.state import State
 
 from ..deps import DBSession, PermittedUserChecker
+from ..reprint_policy import semester_reprint_overage, semester_reprint_overages
 from ..utils import get_user_permissions, highest_priority_display_role
 
 from models.audit_log import AuditLog
@@ -136,6 +137,9 @@ async def get_user_by_rcsid(
     current_semester_id = await session.scalar(select(State.active_semester_id))
     user_permissions = await get_user_permissions(session, user.id)
     semester_balance = await get_semester_balance(session, user.id, current_semester_id)
+    reprint_overage = await semester_reprint_overage(
+        session, user.id, current_semester_id
+    )
     return UserNoHash(
         id=user.id,
         is_rpi_staff=user.is_rpi_staff,
@@ -151,7 +155,10 @@ async def get_user_by_rcsid(
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
-        semester_balance=semester_balance,
+        # The overage is part of what the member owes, so it is folded into
+        # the balance and also reported on its own so the UI can break it out.
+        semester_balance=semester_balance + reprint_overage,
+        reprint_overage=reprint_overage,
     )
 
 
@@ -174,6 +181,9 @@ async def get_user_by_rin(
     current_semester_id = await session.scalar(select(State.active_semester_id))
     user_permissions = await get_user_permissions(session, user.id)
     semester_balance = await get_semester_balance(session, user.id, current_semester_id)
+    reprint_overage = await semester_reprint_overage(
+        session, user.id, current_semester_id
+    )
     return UserNoHash(
         id=user.id,
         is_rpi_staff=user.is_rpi_staff,
@@ -189,7 +199,10 @@ async def get_user_by_rin(
         is_graduating=user.is_graduating,
         is_email_verified=user.is_email_verified,
         checked_graduating=user.checked_graduating,
-        semester_balance=semester_balance,
+        # The overage is part of what the member owes, so it is folded into
+        # the balance and also reported on its own so the UI can break it out.
+        semester_balance=semester_balance + reprint_overage,
+        reprint_overage=reprint_overage,
     )
 
 
@@ -268,6 +281,10 @@ async def get_all_users(
         else None
     )
 
+    overages = await semester_reprint_overages(
+        session, [user.id for user in users], current_semester_id
+    )
+
     user_permissions = {
         user.id: await get_user_permissions(session, user.id) 
         for user in users
@@ -298,7 +315,9 @@ async def get_all_users(
                 )
                 if semester_balances and len(semester_balances) > 0
                 else 0.0
-            ),
+            )
+            + overages.get(user.id, Decimal(0)),
+            reprint_overage=overages.get(user.id, Decimal(0)),
         )
         for user in users
     ]
@@ -324,6 +343,9 @@ async def edit_user_graduation(
     semester_balance = await get_semester_balance(
         session, current_user.id, current_semester_id
     )
+    reprint_overage = await semester_reprint_overage(
+        session, current_user.id, current_semester_id
+    )
 
     return UserNoHash(
         id=current_user.id,
@@ -340,7 +362,10 @@ async def edit_user_graduation(
         is_graduating=current_user.is_graduating,
         checked_graduating=current_user.checked_graduating,
         is_email_verified=current_user.is_email_verified,
-        semester_balance=semester_balance,
+        # The overage is part of what the member owes, so it is folded into
+        # the balance and also reported on its own so the UI can break it out.
+        semester_balance=semester_balance + reprint_overage,
+        reprint_overage=reprint_overage,
     )
 
 
@@ -388,6 +413,10 @@ async def get_users_by_role(
         else None
     )
 
+    overages = await semester_reprint_overages(
+        session, [user.id for user in users], current_semester_id
+    )
+
     user_permissions = {
         user.id: await get_user_permissions(session, user.id)
         for user in users
@@ -418,7 +447,9 @@ async def get_users_by_role(
                 )
                 if semester_balances and len(semester_balances) > 0
                 else 0.0
-            ),
+            )
+            + overages.get(user.id, Decimal(0)),
+            reprint_overage=overages.get(user.id, Decimal(0)),
         )
         for user in users
     ]

@@ -29,20 +29,23 @@ export const FailAMachineForm: React.FC = () => {
         fetchMachines();
     }, []);
 
-    const [inProgress, setInProgress] = useState<Record<string, { usage_start?: string; usage_duration?: number }>>({});
+    // The machines the backend would accept a failure for, with the usage each
+    // one would fail: in use, or cleared recently enough that the print it just
+    // ran can still be failed. Asking the backend keeps the rule in one place,
+    // and a cleared machine's usage is what the percentage checks below read.
+    const [failable, setFailable] = useState<Record<string, { usage_start?: string; usage_duration?: number }>>({});
 
-    const loadInProgress = () => {
-        OmniAPI.getPublic("machinestatus").then((res: any) => {
-            const all = [...(res?.loners ?? []), ...(res?.groups ?? []).flatMap((g: any) => g.machines ?? [])];
-            setInProgress(Object.fromEntries(all.filter((m: any) => m.in_use).map((m: any) => [m.id, m])));
-        }).catch(() => setInProgress({}));
+    const loadFailable = () => {
+        OmniAPI.getAll("failable-machines").then((rows: any[]) => {
+            setFailable(Object.fromEntries(rows.map((row) => [row.machine_id, row])));
+        }).catch(() => setFailable({}));
     };
 
     useEffect(() => {
-        loadInProgress();
+        loadFailable();
     }, []);
 
-    const failableMachines = machines.filter((machine) => machine.id in inProgress);
+    const failableMachines = machines.filter((machine) => machine.id in failable);
 
     const PERCENT_MARGIN = 25;
 
@@ -51,7 +54,7 @@ export const FailAMachineForm: React.FC = () => {
      * This is how far along the print *should* be, not where it actually failed.
      */
     const scheduledPercent = (): number | null => {
-        const usage = inProgress[selectedMachineId];
+        const usage = failable[selectedMachineId];
         if (!usage?.usage_start || !usage?.usage_duration) return null;
         const elapsedSeconds = (Date.now() - new Date(usage.usage_start).getTime()) / 1000;
         return Math.round((elapsedSeconds / usage.usage_duration) * 100);
@@ -132,7 +135,7 @@ export const FailAMachineForm: React.FC = () => {
             if (error?.response?.status !== 502) return;
         } finally {
             setIsSubmitting(false);
-            loadInProgress();
+            loadFailable();
         }
         
         // Clear form
@@ -164,7 +167,7 @@ export const FailAMachineForm: React.FC = () => {
                     onChange={(e) => handleSelectMachine(e.target.value)}
                     required
                 >
-                    <option className='styled-dropdown-placeholder' value="_" hidden>{failableMachines.length ? "Please Select a Machine" : "No machines are in use"}</option>
+                    <option className='styled-dropdown-placeholder' value="_" hidden>{failableMachines.length ? "Please Select a Machine" : "No machines can be failed right now"}</option>
                     {failableMachines.map((machine: Machine) => (
                         <option className='styled-dropdown-option' key={machine.id} value={machine.id}>{machine.name}</option>
                     ))}

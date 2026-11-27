@@ -16,6 +16,7 @@ from schemas.requests import ActivateSemesterRequest, GetChargeSheetsRequest
 from schemas.responses import CreateResponse, UserChargeResponse
 
 from ..deps import DBSession, PermittedUserChecker
+from ..reprint_policy import semester_reprint_overages
 
 router = APIRouter()
 
@@ -154,23 +155,36 @@ async def get_charge_sheet(
         ).all()
     )
 
-    return [
-        UserChargeResponse(
-            RIN=user.RIN,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            is_graduating=user.is_graduating,
-            semester_balance=Decimal(
-                next(
-                    (balance.tuple()[1]
-                     for balance in semester_balances
-                     if balance.tuple()[0] == user.id),
-                    0.0
-                )
-                if semester_balances and len(semester_balances) > 0
-                else 0.0
-            ),
+    # The reprint cap is cumulative over the semester, so it is settled here
+    # rather than when each usage was logged.
+    overages = await semester_reprint_overages(
+        session, [user.id for user in users], semester.id
+    )
+
+    charges = []
+    for user in users:
+        logged = Decimal(
+            next(
+                (balance.tuple()[1]
+                 for balance in semester_balances
+                 if balance.tuple()[0] == user.id),
+                0.0
+            )
+            if semester_balances and len(semester_balances) > 0
+            else 0.0
         )
-        for user in users
-    ]
+        overage = overages[user.id]
+        charges.append(
+            UserChargeResponse(
+                RIN=user.RIN,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                is_graduating=user.is_graduating,
+                # Reported separately as well, so a member querying their bill
+                # can see the reprint portion rather than one opaque number.
+                reprint_overage=overage,
+                semester_balance=logged + overage,
+            )
+        )
+    return charges
 

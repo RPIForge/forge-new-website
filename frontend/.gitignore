@@ -1,1 +1,3 @@
 /node_modules
+# Build output from "vite build" / "npm run build". Never committed.
+/dist

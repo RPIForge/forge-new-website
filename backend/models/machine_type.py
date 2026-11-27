@@ -38,3 +38,12 @@ class MachineType(Base):
     # How much to charge (in dollars per hour) when using this machine,
     # regardless of inputs.
     cost_per_hour: Mapped[Decimal] = mapped_column(DECIMAL(precision=10, scale=5), server_default="0")
+
+    # Whether a failed print on this kind of machine can earn a free reprint.
+    # The reprint policy covers the Prusa printers only, so eboard ticks this
+    # for those machine types and leaves it off for resin, laser and sticker.
+    # Defaults to off so a newly created machine type is never accidentally
+    # eligible.
+    allows_free_reprints: Mapped[bool] = mapped_column(
+        default=False, server_default="false"
+    )

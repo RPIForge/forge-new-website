@@ -5,25 +5,27 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from models.audit_log import AuditLog
 from models.machine_usage import MachineUsage
-from schemas.responses import MachineUsageSchema, ResourceInfo, ResourceSlotSchema
+from schemas.responses import MachineUsageResult, MachineUsageSchema, ResourceInfo, ResourceSlotSchema
 
 from ..utils import has_permissions_any
 from models.machine import Machine
 from models.machine_type import MachineType
 from models.resource_slot import ResourceSlot
+from models.resource import Resource
 from models.resource_usage_quantity import ResourceUsageQuantity
 from models.state import State
 from schemas.requests import MachineUsageRequest
 
 from ..deps import DBSession, PermittedUserChecker
+from ..reprint_policy import ALREADY_CLAIMED, evaluate_free_reprint
 from models.user import User
 from schemas.enums import LogType, Permissions
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 router = APIRouter()
-
 
 @router.get("/use/{machine_id}/schema")
 async def get_usage_schema(
@@ -88,7 +90,7 @@ async def use_a_machine(
     current_user: Annotated[
         User, Depends(PermittedUserChecker({Permissions.CAN_USE_MACHINES}))
     ],
-):
+) -> MachineUsageResult:
     """Log a machine usage for the provided machine ID."""
 
     machine = await session.scalar(
@@ -225,8 +227,15 @@ async def use_a_machine(
         if not usage_info.is_own_material:
             total_cost += usage_info.amount * resource_used.cost
 
+    reprint_of = None
+    reprint_note = None
     if request.is_reprint:
-        total_cost = 0
+        reprint_of, reprint_note = await evaluate_free_reprint(
+            session, current_user, current_semester.id if current_semester else None,
+            resource_usage_quantities, machine,
+        )
+        if reprint_of is not None:
+            total_cost = 0
 
     machine_usage = MachineUsage(
         machine=machine,
@@ -235,13 +244,26 @@ async def use_a_machine(
         duration_seconds=request.duration_seconds,
         cost=total_cost,
         is_reprint=request.is_reprint,
+        reprint_of=reprint_of,
         resources_used=resource_usage_quantities,
     )
     machine.active_usage = machine_usage
 
     session.add(machine_usage)
     session.add(machine)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        if reprint_of is None:
+            raise
+        # The unique index on reprint_of_id caught a free reprint granted
+        # against a failure that another submission claimed between the pick
+        # and this commit. Rare, and submitting again picks the next one.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ALREADY_CLAIMED,
+        )
     await session.refresh(machine_usage)
     
     audit_log = AuditLog(
@@ -254,3 +276,9 @@ async def use_a_machine(
     )
     session.add(audit_log)
     await session.commit()
+
+    return MachineUsageResult(
+        cost=total_cost,
+        free_reprint=reprint_of is not None,
+        reprint_note=reprint_note,
+    )

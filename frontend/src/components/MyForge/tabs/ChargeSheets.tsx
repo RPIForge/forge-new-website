@@ -15,6 +15,7 @@ type ChargeSheetCsvRow = {
     lastName: string;
     membershipCharge: string;
     usagesCharge: string;
+    reprintOverage: string;
     totalCharge: string;
 };
 
@@ -25,7 +26,7 @@ const ChargeSheets: React.FC = () => {
 
     const [data, setData] = useState<UserCharge[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const columns: (keyof UserCharge)[] = ['RIN', 'first_name', 'last_name', 'semester_balance', 'is_graduating'];
+    const columns: (keyof UserCharge)[] = ['RIN', 'first_name', 'last_name', 'semester_balance', 'reprint_overage', 'is_graduating'];
 
     const [semesterId, setSemesterId] = useState<string | null>(null);
     const [semesters, setSemesters] = useState<Semester[]>([]);
@@ -81,13 +82,16 @@ const ChargeSheets: React.FC = () => {
                 lastName: row.last_name,
                 membershipCharge: membership.toFixed(2),
                 usagesCharge: usages.toFixed(2),
+                // Already inside usagesCharge; broken out so a disputed bill
+                // can be explained without re-deriving it.
+                reprintOverage: Number(row.reprint_overage ?? 0).toFixed(2),
                 totalCharge: total.toFixed(2)
             };
         });
     }
 
     function downloadCSV(rows: ChargeSheetCsvRow[], semesterName: string, graduatingornot: string) {
-        const csvHeader = ['RIN', 'First Name', 'Last Name', 'Membership Charge', 'Usages Charge', 'Total Charge'];
+        const csvHeader = ['RIN', 'First Name', 'Last Name', 'Membership Charge', 'Usages Charge', 'Reprint Overage', 'Total Charge'];
         const escapeCSV = (field: any) => {
             const str = String(field ?? '');
             if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
@@ -101,6 +105,7 @@ const ChargeSheets: React.FC = () => {
             row.lastName,
             row.membershipCharge,
             row.usagesCharge,
+            row.reprintOverage,
             row.totalCharge
         ]);
         const csvContent = [csvHeader, ...csvRows]
