@@ -97,13 +97,20 @@ export const DynamicMachineForm: React.FC = () => {
     useEffect(() => {
         if (!formData.reprint || failuresLoaded) return;
 
+        // Unticking the box doesn't stop a request already in the air, so
+        // re-ticking can leave two running. Without this the slower one wins
+        // whichever was sent first, and a late failure can bury a good result.
+        let cancelled = false;
+
         const fetchClaimableFailures = async () => {
             try {
                 const failures: ClaimableFailure[] = await OmniAPI.getAll("usages/me/claimable-failures");
+                if (cancelled) return;
                 console.log("Claimable failures:", failures);
                 setClaimableFailures(failures);
                 setFailuresError(false);
             } catch (error) {
+                if (cancelled) return;
                 console.log("Failed to load claimable failures", error);
                 setClaimableFailures([]);
                 setFailuresError(true);
@@ -112,6 +119,7 @@ export const DynamicMachineForm: React.FC = () => {
         };
 
         fetchClaimableFailures();
+        return () => { cancelled = true; };
     }, [formData.reprint, failuresLoaded]);
 
 
@@ -507,7 +515,11 @@ export const DynamicMachineForm: React.FC = () => {
                                             <option value="">Select a failed print...</option>
                                             {claimableFailures.map((failure) => (
                                                 <option key={failure.id} value={failure.id}>
-                                                    {`${failure.machine_name} - ${new Date(failure.failed_at ?? failure.time_started).toLocaleDateString()} - ${Number(failure.forge_grams).toFixed(1)}g${failure.eligible ? "" : " (will be charged)"}`}
+                                                    {/* Time of day included on purpose: two prints of the
+                                                        same part on the same machine on the same day are
+                                                        otherwise one label, in the one control whose job
+                                                        is telling them apart. */}
+                                                    {`${failure.machine_name} - ${new Date(failure.failed_at ?? failure.time_started).toLocaleString()} - ${Number(failure.forge_grams).toFixed(1)}g${failure.eligible ? "" : " (will be charged)"}`}
                                                 </option>
                                             ))}
                                         </select>

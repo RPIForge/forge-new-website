@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 from azure.communication.email import EmailClient
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -139,7 +139,7 @@ async def fail_machine(
     session.add(audit_log)
 
     machine.active_usage.failed = True
-    machine.active_usage.failed_at = datetime.now()
+    machine.active_usage.failed_at = datetime.now(UTC)
     session.add(machine)
     await session.commit()
 

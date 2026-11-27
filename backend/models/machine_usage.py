@@ -39,7 +39,9 @@ class MachineUsage(Base):
 
     # Did usage fail?
     failed: Mapped[bool] = mapped_column(default=False)
-    failed_at: Mapped[Optional[datetime]]
+    # Timezone-aware, so it serialises with an offset and clients read it as
+    # the instant it was, not as their own local time.
+    failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     is_reprint: Mapped[bool] = mapped_column(default=False, server_default="false")
 
